@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --vinho: #541C1D;
+  --vinho-claro: #6E2A2B;
+  --vinho-escuro: #3A1213;
+  --pessego: #FCCAAF;
+  --pessego-escuro: #E8AE8E;
+  --texto-claro: #F5E4DA;
+
+  --font-display: 'Oswald', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--vinho);
+  color: var(--texto-claro);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pessego);
+  margin: 0;
+}
+
+a {
+  color: var(--pessego);
+}
+
+button {
+  font-family: var(--font-body);
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+}
+
+.btn-primary {
+  background: var(--pessego);
+  color: var(--vinho-escuro);
+  font-weight: 600;
+  padding: 0.85rem 1.5rem;
+  font-size: 1rem;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--pessego);
+  border: 1px solid var(--pessego-escuro);
+  padding: 0.7rem 1.3rem;
+}
+
+.card {
+  background: var(--vinho-claro);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+input, select, textarea {
+  background: var(--vinho-escuro);
+  border: 1px solid var(--vinho-claro);
+  color: var(--texto-claro);
+  border-radius: 6px;
+  padding: 0.7rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--pessego);
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.05em;
+}
+
+.badge-aberto {
+  background: var(--pessego);
+  color: var(--vinho-escuro);
+}
+
+.badge-fechado {
+  background: var(--vinho-escuro);
+  color: var(--pessego-escuro);
+  border: 1px solid var(--pessego-escuro);
+}
