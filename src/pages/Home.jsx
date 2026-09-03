@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   motion,
@@ -27,7 +27,7 @@ import {
   ImageIcon,
 } from 'lucide-react'
 import { useSettings } from '../hooks/useSettings'
-import { chaveDoDia, proximaAbertura } from '../lib/schedule'
+import { abertoAgora, chaveDoDia, proximaAbertura } from '../lib/schedule'
 import { IconInstagram } from './icons'
 import './home.css'
 
@@ -313,9 +313,15 @@ function Faq() {
 
 export default function Home() {
   const { settings, loading } = useSettings()
-  const aberto = settings?.status_aberto
-  const hojeKey = chaveDoDia(new Date().getDay())
-  const abreEm = !aberto ? proximaAbertura(settings?.horario_funcionamento) : null
+  // re-render a cada minuto pra virar aberto/fechado na hora certa sem reload
+  const [agora, setAgora] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setAgora(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const aberto = settings ? abertoAgora(settings, agora) : undefined
+  const hojeKey = chaveDoDia(agora.getDay())
+  const abreEm = !aberto ? proximaAbertura(settings?.horario_funcionamento, agora) : null
 
   const heroRef = useRef(null)
   const [stuck, setStuck] = useState(false)

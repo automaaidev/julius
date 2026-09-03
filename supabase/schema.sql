@@ -17,7 +17,12 @@ alter default privileges in schema julius grant all on functions to anon, authen
 -- ============================================================
 create table if not exists julius.settings (
   id int primary key default 1 check (id = 1), -- singleton row
-  status_aberto boolean not null default false,
+  -- política de abertura:
+  --   'auto'    -> segue horario_funcionamento (padrão)
+  --   'aberto'  -> força aberto  | 'fechado' -> força fechado
+  abertura_modo text not null default 'auto'
+    check (abertura_modo in ('auto', 'aberto', 'fechado')),
+  status_aberto boolean, -- legado; nada mais lê (ver migration 20260904)
   horario_funcionamento jsonb not null default '{}'::jsonb,
   -- ex: {"seg":"fechado","ter":"fechado","qua":"19:00-23:00","qui":"19:00-23:00","sex":"19:00-01:00","sab":"19:00-01:00","dom":"18:00-23:00"}
   updated_at timestamptz not null default now()
@@ -74,11 +79,72 @@ create policy "queue_delete_admin" on julius.queue_entries
   for delete using (auth.role() = 'authenticated');
 
 -- ============================================================
+-- _faixa_minutos / esta_aberto: estado efetivo da casa a partir de
+-- abertura_modo + horario_funcionamento (fuso America/Sao_Paulo).
+-- ============================================================
+create or replace function julius._faixa_minutos(faixa text)
+returns int[]
+language plpgsql
+immutable
+as $$
+declare
+  ini text; fim text; a int; f int;
+begin
+  if faixa is null or faixa = 'fechado' or position('-' in faixa) = 0 then
+    return null;
+  end if;
+  ini := split_part(faixa, '-', 1);
+  fim := split_part(faixa, '-', 2);
+  a := split_part(ini, ':', 1)::int * 60 + coalesce(nullif(split_part(ini, ':', 2), ''), '0')::int;
+  f := split_part(fim, ':', 1)::int * 60 + coalesce(nullif(split_part(fim, ':', 2), ''), '0')::int;
+  if f <= a then f := f + 1440; end if;
+  return array[a, f];
+exception when others then return null;
+end;
+$$;
+
+create or replace function julius.esta_aberto()
+returns boolean
+language plpgsql
+stable
+as $$
+declare
+  s julius.settings;
+  hora_local timestamp := (now() at time zone 'America/Sao_Paulo');
+  dow int;
+  min_agora int;
+  chaves text[] := array['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+  fx int[];
+begin
+  select * into s from julius.settings where id = 1;
+  if s.abertura_modo = 'aberto' then return true; end if;
+  if s.abertura_modo = 'fechado' then return false; end if;
+
+  dow := extract(dow from hora_local)::int;
+  min_agora := extract(hour from hora_local)::int * 60 + extract(minute from hora_local)::int;
+
+  fx := julius._faixa_minutos(s.horario_funcionamento ->> chaves[dow + 1]);
+  if fx is not null and min_agora >= fx[1] and min_agora < fx[2] then
+    return true;
+  end if;
+
+  fx := julius._faixa_minutos(s.horario_funcionamento ->> chaves[((dow + 6) % 7) + 1]);
+  if fx is not null and fx[2] > 1440 and min_agora < fx[2] - 1440 then
+    return true;
+  end if;
+
+  return false;
+end;
+$$;
+
+grant execute on function julius.esta_aberto() to anon, authenticated;
+
+-- ============================================================
 -- join_queue: entrada atômica na fila (evita corrida entre 2 clientes
 -- entrando ao mesmo tempo). security definer p/ contornar RLS de insert.
 --
 -- Regras:
---   1. casa tem que estar aberta
+--   1. casa tem que estar aberta (julius.esta_aberto())
 --   2. máx 2 músicas (status waiting/playing) por perfil_id
 --   3. não-consecutivo: se a última posição ativa da fila já é desse
 --      perfil, a nova entrada pula uma posição — a menos que não haja
@@ -94,7 +160,6 @@ security definer
 set search_path = julius
 as $$
 declare
-  v_aberto boolean;
   v_count_pessoa int;
   v_tail_posicao int;
   v_tail_perfil text;
@@ -113,8 +178,7 @@ begin
   -- concorrentes calculando a mesma posição.
   lock table julius.queue_entries in share row exclusive mode;
 
-  select status_aberto into v_aberto from julius.settings where id = 1;
-  if not v_aberto then
+  if not julius.esta_aberto() then
     raise exception 'CASA_FECHADA' using errcode = 'P0001';
   end if;
 

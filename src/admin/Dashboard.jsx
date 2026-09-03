@@ -15,11 +15,13 @@ import {
   ChevronDown,
   Trash2,
   BarChart3,
+  CalendarClock,
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { contarMusicas } from '../lib/stats'
+import { abertoAgora } from '../lib/schedule'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
 import { useQueue, activeRanked } from '../hooks/useQueue'
@@ -91,14 +93,22 @@ function StatsPanel({ entries }) {
   )
 }
 
+const MODOS = [
+  ['auto', 'Automático', CalendarClock],
+  ['aberto', 'Forçar aberto', DoorOpen],
+  ['fechado', 'Forçar fechado', DoorClosed],
+]
+
 function SettingsPanel({ settings }) {
   const [horario, setHorario] = useState(settings.horario_funcionamento || {})
   const [salvando, setSalvando] = useState(false)
-  const aberto = settings.status_aberto
+  const modo = settings.abertura_modo || 'auto'
+  const aberto = abertoAgora(settings)
 
-  async function toggleAberto() {
-    if (LOCAL) return localDb.updateSettings({ status_aberto: !aberto })
-    await supabase.from('settings').update({ status_aberto: !aberto }).eq('id', 1)
+  async function setModo(novo) {
+    if (novo === modo) return
+    if (LOCAL) return localDb.updateSettings({ abertura_modo: novo })
+    await supabase.from('settings').update({ abertura_modo: novo }).eq('id', 1)
   }
 
   async function salvarHorario(e) {
@@ -119,13 +129,28 @@ function SettingsPanel({ settings }) {
         <div className="adm-status">
           <span className={`adm-status__badge ${aberto ? 'adm-status__badge--on' : 'adm-status__badge--off'}`}>
             <span className="adm-status__dot" />
-            {aberto ? 'Casa aberta' : 'Casa fechada'}
+            {aberto ? 'Casa aberta agora' : 'Casa fechada agora'}
           </span>
-          <button type="button" className="q-btn q-btn--primary q-btn--sm" onClick={toggleAberto}>
-            {aberto ? <DoorClosed size={16} /> : <DoorOpen size={16} />}
-            {aberto ? 'Fechar casa' : 'Abrir casa'}
-          </button>
         </div>
+        <div className="adm-modos">
+          {MODOS.map(([val, label, Icon]) => (
+            <button
+              key={val}
+              type="button"
+              className={`adm-modo ${modo === val ? 'adm-modo--on' : ''}`}
+              onClick={() => setModo(val)}
+            >
+              <Icon size={15} /> {label}
+            </button>
+          ))}
+        </div>
+        <p className="adm-modo__hint">
+          {modo === 'auto'
+            ? 'Abre e fecha sozinho pelo horário de funcionamento abaixo.'
+            : modo === 'aberto'
+              ? 'Casa forçada aberta — ignora o horário até você voltar pra Automático.'
+              : 'Casa forçada fechada — ignora o horário até você voltar pra Automático.'}
+        </p>
       </motion.div>
 
       <motion.form

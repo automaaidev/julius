@@ -115,6 +115,51 @@
   background: currentColor;
 }
 
+/* modo de abertura: automático / forçar aberto / forçar fechado */
+.adm-modos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.adm-modo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.55rem 0.4rem;
+  border: 1px solid var(--linha);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--pessego-escuro);
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.66rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.adm-modo:hover { color: var(--texto-claro); }
+
+.adm-modo--on {
+  border-color: var(--luz);
+  color: var(--palco);
+  background: var(--luz);
+}
+
+.adm-modo__hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.78rem;
+  color: var(--pessego-escuro);
+  opacity: 0.85;
+}
+
+@media (max-width: 520px) {
+  .adm-modos { grid-template-columns: 1fr; }
+}
+
 /* horário */
 .adm-hlist { display: grid; gap: 0.5rem; margin: 0 0 1.2rem; }
 

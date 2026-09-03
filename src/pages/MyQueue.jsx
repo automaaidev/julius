@@ -18,6 +18,7 @@ import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { useSettings } from '../hooks/useSettings'
+import { abertoAgora } from '../lib/schedule'
 import { useQueue, activeRanked } from '../hooks/useQueue'
 import { getPerfilId, getPerfilNome, setPerfilNome } from '../lib/perfil'
 import './queue.css'
@@ -50,7 +51,7 @@ export default function MyQueue() {
   // só bloqueia o pedido quando a casa está confirmadamente fechada.
   // status desconhecido (settings não carregou) -> deixa tentar; a RPC
   // join_queue rejeita com CASA_FECHADA se for o caso.
-  const fechadoConfirmado = !settingsLoading && settings != null && settings.status_aberto === false
+  const fechadoConfirmado = !settingsLoading && settings != null && !abertoAgora(settings)
   const podePedir = !fechadoConfirmado
   const maxAdicionar = Math.max(0, 2 - minhas.length)
 

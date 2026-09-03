@@ -5,7 +5,7 @@ import { localDb } from '../lib/localDb'
 
 // Sem .env e sem modo local: site institucional roda sem status ao vivo.
 const MOCK_SETTINGS = {
-  status_aberto: true,
+  abertura_modo: 'auto',
   horario_funcionamento: {
     qui: '19:00-23:00',
     sex: '19:00-01:00',

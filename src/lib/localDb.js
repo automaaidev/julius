@@ -9,12 +9,14 @@
 //
 // Persistência: uma chave de localStorage. Sem servidor, sem rede.
 
+import { abertoAgora } from './schedule'
+
 const DB_KEY = 'juliu_localdb'
 const SESSION_KEY = 'juliu_local_session'
 
 const SEED = {
   settings: {
-    status_aberto: true,
+    abertura_modo: 'auto', // 'auto' | 'aberto' | 'fechado'
     horario_funcionamento: {
       qui: '19:00-23:00',
       sex: '19:00-01:00',
@@ -101,7 +103,7 @@ export const localDb = {
     const p = String(perfil || '').trim()
     if (!n) throw new Error('NOME_VAZIO')
     if (!p) throw new Error('PERFIL_INVALIDO')
-    if (!db.settings.status_aberto) throw new Error('CASA_FECHADA')
+    if (!abertoAgora(db.settings)) throw new Error('CASA_FECHADA')
 
     const list = ativos()
     if (list.filter((e) => e.perfil_id === p).length >= 2) {
