@@ -1,0 +1,192 @@
+/* Painel admin — mesma linguagem visual de /minha-fila (queue.css).
+   Reaproveita .q-page / .q-card / .q-btn / .q-field / .q-brand etc. */
+
+.adm-shell {
+  width: 100%;
+  max-width: 1120px;
+}
+
+.adm-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.6rem;
+}
+
+.adm-actions { display: flex; gap: 0.5rem; }
+
+/* layout: uma coluna no mobile, meio a meio no tablet/desktop */
+.adm-grid { display: grid; gap: 1rem; }
+.adm-col { display: grid; gap: 1rem; align-content: start; min-width: 0; }
+
+@media (min-width: 900px) {
+  .adm-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  .adm-col--queue { position: sticky; top: 1.5rem; }
+  .adm-col--queue .adm-card {
+    max-height: calc(100svh - 3rem);
+    overflow-y: auto;
+  }
+  /* card rolável clipa overflow-x -> esconde os entalhes do bilhete */
+  .adm-col--queue .adm-card::before,
+  .adm-col--queue .adm-card::after { display: none; }
+}
+
+.adm-card { padding: 1.4rem 1.5rem; }
+.adm-col .q-card + .q-card { margin-top: 0; } /* espaçamento vem do gap do grid */
+
+.adm-h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.8rem;
+  color: var(--luz-suave);
+  margin: 0 0 1.1rem;
+}
+
+/* status aberto/fechado */
+.adm-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.adm-status__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1.1rem;
+}
+
+.adm-status__badge--on { color: var(--luz); }
+.adm-status__badge--off { color: var(--pessego-escuro); }
+
+.adm-status__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* horário */
+.adm-hlist { display: grid; gap: 0.5rem; margin: 0 0 1.2rem; }
+
+.adm-hrow {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 0.7rem;
+  align-items: center;
+}
+
+.adm-hrow > span {
+  font-size: 0.9rem;
+  color: var(--texto-claro);
+  opacity: 0.85;
+  text-transform: capitalize;
+}
+
+/* fila */
+.adm-queue { display: grid; gap: 0.45rem; }
+
+.adm-item {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.adm-item--playing {
+  border-color: var(--luz);
+  background: rgba(231, 178, 76, 0.1);
+}
+
+.adm-item__rank {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(231, 178, 76, 0.14);
+  border: 1px solid rgba(231, 178, 76, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Bebas Neue', 'Oswald', sans-serif;
+  font-size: 1.15rem;
+  color: var(--luz-suave);
+}
+
+.adm-item__body { flex: 1; min-width: 140px; }
+
+.adm-item__title {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
+  color: var(--pessego);
+  font-size: 0.95rem;
+}
+
+.adm-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--texto-claro);
+  opacity: 0.75;
+  margin-top: 0.1rem;
+}
+
+.adm-chip {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.6rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+}
+
+.adm-chip--waiting { background: rgba(252, 202, 175, 0.14); color: var(--pessego-escuro); }
+.adm-chip--playing { background: var(--luz); color: var(--palco); }
+
+.adm-item__acts {
+  display: flex;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.adm-done { margin-top: 1rem; }
+
+.adm-done summary {
+  cursor: pointer;
+  color: var(--pessego-escuro);
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+}
+
+.adm-done__item {
+  padding: 0.4rem 0;
+  font-size: 0.88rem;
+  color: var(--texto-claro);
+  opacity: 0.65;
+}
+
+@media (max-width: 520px) {
+  .adm-item__acts { width: 100%; justify-content: flex-end; }
+}

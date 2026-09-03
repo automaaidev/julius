@@ -9,10 +9,6 @@
 
 :root {
   --lp-max: 1120px;
-  --luz: #e7b24c;          /* refletor de palco, âmbar quente */
-  --luz-suave: #f0cd8b;
-  --palco: #2a0c0d;        /* vinho mais fundo, "boca de cena" */
-  --linha: rgba(252, 202, 175, 0.16);
 }
 
 /* ===== keyframes ===== */
@@ -411,7 +407,10 @@
   max-width: var(--lp-max);
   margin: 0 auto;
   padding: clamp(3.5rem, 9vw, 7rem) 1.25rem;
+  scroll-margin-top: 84px;
 }
+
+#hero { scroll-margin-top: 0; }
 
 .lp-section__kicker {
   display: block;

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { LOCAL } from '../lib/flags'
+import { localDb } from '../lib/localDb'
 
-// Sem .env configurado ainda: mock local pra dar pra testar a tela "aberto"
-// antes de existir um projeto Supabase de verdade. Some assim que .env existir.
+// Sem .env e sem modo local: site institucional roda sem status ao vivo.
 const MOCK_SETTINGS = {
   status_aberto: true,
   horario_funcionamento: {
@@ -14,11 +15,20 @@ const MOCK_SETTINGS = {
 }
 
 export function useSettings() {
-  const [settings, setSettings] = useState(supabase ? null : MOCK_SETTINGS)
-  const [loading, setLoading] = useState(Boolean(supabase))
+  const [settings, setSettings] = useState(() => {
+    if (LOCAL) return localDb.getSettings()
+    return supabase ? null : MOCK_SETTINGS
+  })
+  const [loading, setLoading] = useState(!LOCAL && Boolean(supabase))
 
   useEffect(() => {
-    if (!supabase) return // sem .env configurado ainda — site institucional roda sem status ao vivo
+    if (LOCAL) {
+      const sync = () => setSettings(localDb.getSettings())
+      sync()
+      return localDb.subscribe(sync)
+    }
+
+    if (!supabase) return // sem .env configurado ainda
 
     let active = true
 
@@ -38,7 +48,7 @@ export function useSettings() {
       .channel('settings-realtime')
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'settings', filter: 'id=eq.1' },
+        { event: 'UPDATE', schema: 'julius', table: 'settings', filter: 'id=eq.1' },
         (payload) => setSettings(payload.new)
       )
       .subscribe()

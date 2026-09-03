@@ -8,6 +8,12 @@
   --pessego-escuro: #E8AE8E;
   --texto-claro: #F5E4DA;
 
+  /* acento da casa: refletor de palco */
+  --luz: #E7B24C;
+  --luz-suave: #F0CD8B;
+  --palco: #2A0C0D;
+  --linha: rgba(252, 202, 175, 0.16);
+
   --font-display: 'Oswald', sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
 
@@ -22,6 +28,12 @@ html, body, #root {
   margin: 0;
   padding: 0;
   min-height: 100%;
+}
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
 }
 
 body {

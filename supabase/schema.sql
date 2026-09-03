@@ -28,10 +28,13 @@ insert into julius.settings (id) values (1) on conflict (id) do nothing;
 -- ============================================================
 -- queue_entries
 -- ============================================================
+-- identidade do cliente = "perfil" (perfil_id: uuid gerado no navegador,
+-- guardado no localStorage) + nome de exibição (pode ser o nome da dupla).
+-- Sem login. O limite de músicas vale por perfil_id.
 create table if not exists julius.queue_entries (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  telefone text not null,
+  perfil_id text not null,
   numero_musica text not null,
   status text not null default 'waiting' check (status in ('waiting','playing','done')),
   posicao int not null,
@@ -40,7 +43,7 @@ create table if not exists julius.queue_entries (
 
 create index if not exists idx_queue_status on julius.queue_entries (status);
 create index if not exists idx_queue_posicao on julius.queue_entries (posicao);
-create index if not exists idx_queue_telefone on julius.queue_entries (telefone);
+create index if not exists idx_queue_perfil on julius.queue_entries (perfil_id);
 
 -- ============================================================
 -- RLS
@@ -76,14 +79,14 @@ create policy "queue_delete_admin" on julius.queue_entries
 --
 -- Regras:
 --   1. casa tem que estar aberta
---   2. máx 2 músicas (status waiting/playing) por telefone
---   3. não-consecutivo: se a última posição ativa da fila já é dessa
---      pessoa, a nova entrada pula uma posição — a menos que não haja
---      mais ninguém (outro telefone) ativo na fila.
+--   2. máx 2 músicas (status waiting/playing) por perfil_id
+--   3. não-consecutivo: se a última posição ativa da fila já é desse
+--      perfil, a nova entrada pula uma posição — a menos que não haja
+--      mais ninguém (outro perfil) ativo na fila.
 -- ============================================================
 create or replace function julius.join_queue(
   p_nome text,
-  p_telefone text,
+  p_perfil text,
   p_numero_musica text
 ) returns julius.queue_entries
 language plpgsql
@@ -94,11 +97,18 @@ declare
   v_aberto boolean;
   v_count_pessoa int;
   v_tail_posicao int;
-  v_tail_telefone text;
+  v_tail_perfil text;
   v_outros_ativos int;
   v_nova_posicao int;
   v_row julius.queue_entries;
 begin
+  if coalesce(btrim(p_nome), '') = '' then
+    raise exception 'NOME_VAZIO' using errcode = 'P0001';
+  end if;
+  if coalesce(btrim(p_perfil), '') = '' then
+    raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
+  end if;
+
   -- trava a fila inteira p/ essa transação: evita duas entradas
   -- concorrentes calculando a mesma posição.
   lock table julius.queue_entries in share row exclusive mode;
@@ -110,13 +120,13 @@ begin
 
   select count(*) into v_count_pessoa
   from julius.queue_entries
-  where telefone = p_telefone and status in ('waiting','playing');
+  where perfil_id = p_perfil and status in ('waiting','playing');
 
   if v_count_pessoa >= 2 then
     raise exception 'LIMITE_2_MUSICAS' using errcode = 'P0001';
   end if;
 
-  select posicao, telefone into v_tail_posicao, v_tail_telefone
+  select posicao, perfil_id into v_tail_posicao, v_tail_perfil
   from julius.queue_entries
   where status in ('waiting','playing')
   order by posicao desc
@@ -127,9 +137,9 @@ begin
   else
     select count(*) into v_outros_ativos
     from julius.queue_entries
-    where status in ('waiting','playing') and telefone <> p_telefone;
+    where status in ('waiting','playing') and perfil_id <> p_perfil;
 
-    if v_tail_telefone = p_telefone and v_outros_ativos > 0 then
+    if v_tail_perfil = p_perfil and v_outros_ativos > 0 then
       -- pularia posição consecutiva com música própria: pula uma
       v_nova_posicao := v_tail_posicao + 2;
     else
@@ -137,8 +147,8 @@ begin
     end if;
   end if;
 
-  insert into julius.queue_entries (nome, telefone, numero_musica, status, posicao)
-  values (p_nome, p_telefone, p_numero_musica, 'waiting', v_nova_posicao)
+  insert into julius.queue_entries (nome, perfil_id, numero_musica, status, posicao)
+  values (btrim(p_nome), p_perfil, p_numero_musica, 'waiting', v_nova_posicao)
   returning * into v_row;
 
   return v_row;

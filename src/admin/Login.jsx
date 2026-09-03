@@ -1,6 +1,10 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Mic2, LockKeyhole, ChevronRight } from 'lucide-react'
+import { LOCAL } from '../lib/flags'
 import { useAuth } from '../hooks/useAuth'
+import '../pages/queue.css'
 
 export default function Login() {
   const { session, signIn } = useAuth()
@@ -9,7 +13,7 @@ export default function Login() {
   const [erro, setErro] = useState('')
   const [enviando, setEnviando] = useState(false)
 
-  if (session) return <Navigate to="/admin" replace />
+  if (session) return <Navigate to="/app/admin" replace />
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -21,22 +25,48 @@ export default function Login() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 380 }}>
-      <h1 style={{ fontSize: '1.6rem', marginBottom: '1rem' }}>Admin — Juliu's</h1>
-      <form onSubmit={handleSubmit} className="card" style={{ display: 'grid', gap: '0.9rem' }}>
-        <label>
-          Email
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
-        </label>
-        <label>
-          Senha
-          <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
-        </label>
-        {erro && <p style={{ color: 'var(--pessego)' }}>{erro}</p>}
-        <button className="btn-primary" type="submit" disabled={enviando}>
-          {enviando ? 'Entrando...' : 'Entrar'}
-        </button>
-      </form>
+    <div className="q-page">
+      <div className="q-shell">
+        <div className="q-top">
+          <Link to="/" className="q-brand">
+            <span className="q-brand__mark"><Mic2 size={17} strokeWidth={2.4} /></span>
+            JULIU&apos;S
+          </Link>
+        </div>
+
+        <div className="q-head">
+          <h1>Painel</h1>
+          <p>Acesso da equipe da casa.</p>
+        </div>
+
+        <motion.form
+          className="q-card q-form"
+          onSubmit={handleSubmit}
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          <label className="q-field">
+            <span>Email</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoFocus />
+          </label>
+          <label className="q-field">
+            <span><LockKeyhole size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />Senha</span>
+            <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
+          </label>
+
+          {LOCAL && (
+            <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>
+              Modo local: qualquer email/senha entra.
+            </p>
+          )}
+          {erro && <p className="q-error">{erro}</p>}
+
+          <button className="q-btn q-btn--primary" type="submit" disabled={enviando}>
+            {enviando ? 'Entrando…' : 'Entrar'} <ChevronRight size={18} />
+          </button>
+        </motion.form>
+      </div>
     </div>
   )
 }

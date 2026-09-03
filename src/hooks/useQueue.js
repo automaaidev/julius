@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { LOCAL } from '../lib/flags'
+import { localDb } from '../lib/localDb'
 
 // Traz TODAS as entradas (inclui 'done') pro admin; tela do cliente
 // filtra localmente o que precisa.
 export function useQueue() {
-  const [entries, setEntries] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [entries, setEntries] = useState(() => (LOCAL ? localDb.getQueue() : []))
+  const [loading, setLoading] = useState(!LOCAL)
 
   const refetch = useCallback(async () => {
+    if (LOCAL) {
+      setEntries(localDb.getQueue())
+      setLoading(false)
+      return
+    }
     if (!supabase) return
     const { data } = await supabase
       .from('queue_entries')
@@ -18,6 +25,15 @@ export function useQueue() {
   }, [])
 
   useEffect(() => {
+    if (LOCAL) {
+      const sync = () => {
+        setEntries(localDb.getQueue())
+        setLoading(false)
+      }
+      sync()
+      return localDb.subscribe(sync)
+    }
+
     if (!supabase) {
       setLoading(false)
       return
@@ -29,7 +45,7 @@ export function useQueue() {
       .channel('queue-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'queue_entries' },
+        { event: '*', schema: 'julius', table: 'queue_entries' },
         () => refetch()
       )
       .subscribe()

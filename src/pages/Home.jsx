@@ -81,7 +81,7 @@ const STEPS = [
   {
     icon: ListOrdered,
     title: 'Entre na fila',
-    desc: 'Nome, telefone e pronto — sem cadastro, sem senha. Acompanhe a posição ao vivo.',
+    desc: 'Só o seu nome (ou o da dupla) e pronto — sem cadastro, sem senha. Acompanhe a posição ao vivo.',
   },
   {
     icon: Mic2,
@@ -125,8 +125,8 @@ const GALERIA = [
 // TODO: confirmar respostas marcadas com [confirmar]
 const FAQ = [
   { q: 'Precisa pagar pra cantar?', a: 'Não. Cantar é de graça, sempre. Você consome o que quiser no bar, mas o microfone é livre.' },
-  { q: 'Como eu entro na fila?', a: 'Pelo site: nome, telefone e o número da música no catálogo. Dá pra entrar da própria mesa e acompanhar a posição em tempo real.' },
-  { q: 'Posso emendar duas músicas seguidas?', a: 'Cada telefone pode ter até 2 músicas ativas na fila. Se tiver mais gente esperando, a sua segunda música pula uma posição — pra todo mundo cantar.' },
+  { q: 'Como eu entro na fila?', a: 'Pelo site: seu nome (ou o da dupla) e o número da música no catálogo. Dá pra entrar da própria mesa e acompanhar a posição em tempo real.' },
+  { q: 'Posso emendar duas músicas seguidas?', a: 'Cada pessoa pode ter até 2 músicas ativas na fila. Se tiver mais gente esperando, a sua segunda música pula uma posição — pra todo mundo cantar.' },
   { q: 'Como faço uma reserva de aniversário?', a: 'Chama no Instagram ou liga. A gente separa a mesa e combina os detalhes. [confirmar]' },
   { q: 'Tem idade mínima pra entrar?', a: 'Depende da noite e da legislação local. [confirmar]' },
   { q: 'E se a música que eu quero não estiver no catálogo?', a: 'Fala com a equipe. Às vezes rola achar uma versão na hora.' },
@@ -142,6 +142,13 @@ const revealProps = {
 }
 
 const MotionLink = motion.create(Link)
+
+// HashRouter na app -> links de âncora (#secao) não podem navegar de verdade,
+// senão quebram o roteador. preventDefault + scroll manual.
+function onAnchor(e, id) {
+  e.preventDefault()
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+}
 
 // letreiro de lâmpadas — assinatura visual da casa
 function BulbStrip() {
@@ -193,8 +200,14 @@ function MagneticCTA({ href, to, children }) {
     )
   }
   const external = /^https?:/.test(href)
+  const anchor = href?.startsWith('#')
   return (
-    <motion.a {...common} href={href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+    <motion.a
+      {...common}
+      href={href}
+      {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
+      {...(anchor ? { onClick: (e) => onAnchor(e, href.slice(1)) } : {})}
+    >
       {inner}
     </motion.a>
   )
@@ -336,16 +349,16 @@ export default function Home() {
       <motion.div className="lp-progress" style={{ scaleX: progress }} />
 
       <header className={`lp-header ${stuck ? 'lp-header--stuck' : ''}`}>
-        <a href="#hero" className="lp-header__brand">
+        <a href="#hero" className="lp-header__brand" onClick={(e) => onAnchor(e, 'hero')}>
           <span className="lp-header__mark"><Mic2 size={18} strokeWidth={2.4} /></span>
           JULIU&apos;S
         </a>
         <nav className="lp-nav">
-          <a href="#sobre">Sobre</a>
-          <a href="#como">Como funciona</a>
-          <a href="#horario">Horário</a>
-          <a href="#faq">FAQ</a>
-          <a href="#local">Local</a>
+          <a href="#sobre" onClick={(e) => onAnchor(e, 'sobre')}>Sobre</a>
+          <a href="#como" onClick={(e) => onAnchor(e, 'como')}>Como funciona</a>
+          <a href="#horario" onClick={(e) => onAnchor(e, 'horario')}>Horário</a>
+          <a href="#faq" onClick={(e) => onAnchor(e, 'faq')}>FAQ</a>
+          <a href="#local" onClick={(e) => onAnchor(e, 'local')}>Local</a>
         </nav>
         <Link className="lp-header__cta" to="/minha-fila">
           Entrar na fila
@@ -435,7 +448,7 @@ export default function Home() {
                 <MagneticCTA href="#horario">Ver horários</MagneticCTA>
               </div>
               <p className="hero__hint-line">
-                {abreEm ? abreEm.label : <a href="#horario">Confira quando abrimos</a>}
+                {abreEm ? abreEm.label : <a href="#horario" onClick={(e) => onAnchor(e, 'horario')}>Confira quando abrimos</a>}
               </p>
               <p>
                 <Link to="/minha-fila" className="cta-ghost">
