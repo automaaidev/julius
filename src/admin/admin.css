@@ -52,6 +52,40 @@
   margin: 0 0 1.1rem;
 }
 
+/* stats */
+.adm-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+
+.adm-stat {
+  text-align: center;
+  padding: 0.85rem 0.4rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.adm-stat b {
+  display: block;
+  font-family: 'Bebas Neue', 'Oswald', sans-serif;
+  font-size: 1.8rem;
+  line-height: 1;
+  color: var(--luz-suave);
+}
+
+.adm-stat span {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pessego-escuro);
+}
+
+@media (max-width: 520px) {
+  .adm-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* status aberto/fechado */
 .adm-status {
   display: flex;

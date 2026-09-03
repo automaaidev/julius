@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Mic2, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import './queue.css'
 
 export default function NotFound() {
@@ -8,8 +8,7 @@ export default function NotFound() {
       <div className="q-shell">
         <div className="q-top">
           <Link to="/" className="q-brand">
-            <span className="q-brand__mark"><Mic2 size={17} strokeWidth={2.4} /></span>
-            JULIU&apos;S
+            <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
           </Link>
         </div>
         <div className="q-card q-big">

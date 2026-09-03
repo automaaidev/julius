@@ -350,8 +350,7 @@ export default function Home() {
 
       <header className={`lp-header ${stuck ? 'lp-header--stuck' : ''}`}>
         <a href="#hero" className="lp-header__brand" onClick={(e) => onAnchor(e, 'hero')}>
-          <span className="lp-header__mark"><Mic2 size={18} strokeWidth={2.4} /></span>
-          JULIU&apos;S
+          <img className="lp-header__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
         </a>
         <nav className="lp-nav">
           <a href="#sobre" onClick={(e) => onAnchor(e, 'sobre')}>Sobre</a>
@@ -401,14 +400,16 @@ export default function Home() {
             ))}
           </div>
 
-          <motion.h1
+          <motion.img
             className="hero__logo"
-            initial={{ opacity: 0, scale: 0.92, filter: 'blur(8px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            src="/logo-wordmark.png"
+            alt="Juliu's"
+            width="1048"
+            height="272"
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-          >
-            JULIU&apos;S
-          </motion.h1>
+          />
           <motion.p
             className="hero__subtitle"
             initial={{ opacity: 0, letterSpacing: '0.8em' }}
@@ -623,7 +624,7 @@ export default function Home() {
 
       <footer className="lp-footer">
         <span className="lp-footer__brand">
-          <Mic2 size={16} strokeWidth={2.4} /> JULIU&apos;S
+          <img className="lp-footer__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
         </span>
         O videokê da cidade · {new Date().getFullYear()}
       </footer>

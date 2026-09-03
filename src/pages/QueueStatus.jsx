@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mic2, ArrowLeft, Radio, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Radio, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { useQueue, activeRanked } from '../hooks/useQueue'
 import './queue.css'
 
@@ -16,8 +16,7 @@ export default function QueueStatus() {
       <div className="q-shell">
         <div className="q-top">
           <Link to="/" className="q-brand">
-            <span className="q-brand__mark"><Mic2 size={17} strokeWidth={2.4} /></span>
-            JULIU&apos;S
+            <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
           </Link>
           <Link to="/minha-fila" className="q-back">
             <ArrowLeft size={15} /> Minha fila

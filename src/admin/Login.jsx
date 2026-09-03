@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mic2, LockKeyhole, ChevronRight } from 'lucide-react'
+import { LockKeyhole, ChevronRight } from 'lucide-react'
 import { LOCAL } from '../lib/flags'
 import { useAuth } from '../hooks/useAuth'
 import '../pages/queue.css'
@@ -29,8 +29,7 @@ export default function Login() {
       <div className="q-shell">
         <div className="q-top">
           <Link to="/" className="q-brand">
-            <span className="q-brand__mark"><Mic2 size={17} strokeWidth={2.4} /></span>
-            JULIU&apos;S
+            <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
           </Link>
         </div>
 

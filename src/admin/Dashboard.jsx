@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Mic2,
   ExternalLink,
   LogOut,
   DoorOpen,
@@ -15,10 +14,12 @@ import {
   ChevronUp,
   ChevronDown,
   Trash2,
+  BarChart3,
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
+import { contarMusicas } from '../lib/stats'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
 import { useQueue, activeRanked } from '../hooks/useQueue'
@@ -40,7 +41,7 @@ export default function Dashboard() {
       <div className="adm-shell">
         <div className="adm-topbar">
           <span className="q-brand">
-            <span className="q-brand__mark"><Mic2 size={17} strokeWidth={2.4} /></span>
+            <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
             Painel
           </span>
           <div className="adm-actions">
@@ -51,6 +52,7 @@ export default function Dashboard() {
 
         <div className="adm-grid">
           <div className="adm-col">
+            {!loadingQueue && <StatsPanel entries={entries} />}
             {!loadingSettings && settings && <SettingsPanel settings={settings} />}
           </div>
           <div className="adm-col adm-col--queue">
@@ -59,6 +61,33 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
+  )
+}
+
+function StatsPanel({ entries }) {
+  const s = contarMusicas(entries)
+  const tiles = [
+    ['Hoje', s.dia],
+    ['Semana', s.semana],
+    ['Mês', s.mes],
+    ['Ano', s.ano],
+  ]
+  return (
+    <motion.div
+      className="q-card adm-card"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <p className="adm-h2"><BarChart3 size={15} /> Músicas pedidas</p>
+      <div className="adm-stats">
+        {tiles.map(([label, n]) => (
+          <div key={label} className="adm-stat">
+            <b>{n}</b>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+    </motion.div>
   )
 }
 

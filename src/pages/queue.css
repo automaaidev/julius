@@ -42,7 +42,7 @@
 .q-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   font-family: 'Oswald', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -50,6 +50,12 @@
   font-size: 1.05rem;
   color: var(--pessego);
   text-decoration: none;
+}
+
+.q-brand__logo {
+  height: 1.5rem;
+  width: auto;
+  display: block;
 }
 
 .q-brand__mark {
