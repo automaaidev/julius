@@ -10,6 +10,7 @@ import {
   X,
   Radio,
   ChevronRight,
+  Ticket,
   Lock,
   AlertCircle,
   RefreshCw,
@@ -147,7 +148,9 @@ export default function MyQueue() {
           <p>
             {passo === 'identificacao'
               ? 'Seu nome abre sua fila — sem senha, sem cadastro.'
-              : `Fila de ${nome}. Acompanhe sua vez em tempo real.`}
+              : !loading && minhas.length === 0
+                ? `Oi, ${nome}! Vem pra fila e sobe no palco.`
+                : `Fila de ${nome}. Acompanhe sua vez em tempo real.`}
           </p>
         </div>
 
@@ -237,21 +240,30 @@ export default function MyQueue() {
             )}
 
             {!loading && minhas.length === 0 && !mostrarForm && (
-              <div className="q-card">
-                {podePedir ? (
-                  <>
-                    <p className="q-note">Você ainda não tem música nessa fila.</p>
-                    <button type="button" className="q-btn q-btn--primary" onClick={abrirForm}>
-                      <Mic2 size={17} /> Pedir música
-                    </button>
-                  </>
-                ) : (
+              podePedir ? (
+                <motion.div
+                  className="q-card q-invite"
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <span className="q-invite__badge"><Ticket size={13} /> Seu convite</span>
+                  <h2 className="q-invite__title">Bora cantar, {nome}?</h2>
+                  <p className="q-invite__txt">
+                    Você ainda não está em nenhuma fila. Escolhe o número da música no
+                    catálogo e a gente te chama quando chegar sua vez no palco.
+                  </p>
+                  <button type="button" className="q-btn q-btn--primary" onClick={abrirForm}>
+                    <Mic2 size={17} /> Entrar na fila
+                  </button>
+                </motion.div>
+              ) : (
+                <div className="q-card">
                   <p className="q-note">
                     <Lock size={15} style={{ verticalAlign: '-2px', marginRight: 6 }} />
                     Casa fechada agora. Volte no horário de funcionamento pra pedir música.
                   </p>
-                )}
-              </div>
+                </div>
+              )
             )}
 
             {!loading && minhas.length > 0 && podePedir && !mostrarForm && (
