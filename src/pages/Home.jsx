@@ -434,33 +434,25 @@ export default function Home() {
         >
           {loading ? (
             <p>Carregando status…</p>
-          ) : aberto ? (
-            <>
-              <span className="status-pill status-pill--aberto">
-                <span className="status-dot" /> Aberto agora
-              </span>
-              <div>
-                <MagneticCTA to="/minha-fila">Entrar na fila</MagneticCTA>
-              </div>
-              <p className="hero__hint-line">
-                <Link to="/minha-fila">Já entrou? Consulte sua posição</Link>
-              </p>
-            </>
           ) : (
             <>
-              <span className="status-pill status-pill--fechado">
-                <span className="status-dot" /> Fechado
+              <span className={`status-pill ${aberto ? 'status-pill--aberto' : 'status-pill--fechado'}`}>
+                <span className="status-dot" /> {aberto ? 'Aberto agora' : 'Fechado'}
               </span>
               <div>
-                <MagneticCTA href="#horario">Ver horários</MagneticCTA>
+                {aberto ? (
+                  <MagneticCTA to="/minha-fila">Entrar na fila</MagneticCTA>
+                ) : (
+                  <MagneticCTA href="#horario">Ver horários</MagneticCTA>
+                )}
               </div>
+              {!aberto && (
+                <p className="hero__hint-line">
+                  {abreEm ? abreEm.label : <a href="#horario" onClick={(e) => onAnchor(e, 'horario')}>Confira quando abrimos</a>}
+                </p>
+              )}
               <p className="hero__hint-line">
-                {abreEm ? abreEm.label : <a href="#horario" onClick={(e) => onAnchor(e, 'horario')}>Confira quando abrimos</a>}
-              </p>
-              <p>
-                <Link to="/minha-fila" className="cta-ghost">
-                  Já entrou na fila? Consulte sua posição
-                </Link>
+                <Link to="/minha-fila" className="cta-ghost">Já tá na fila? Vem ver sua vez</Link>
               </p>
             </>
           )}
