@@ -40,6 +40,7 @@ create table if not exists julius.queue_entries (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   perfil_id text not null,
+  telefone text, -- só dígitos, formato wa.me: 55 + DDD + número. Usado pra aviso no WhatsApp.
   numero_musica text not null,
   status text not null default 'waiting' check (status in ('waiting','playing','done')),
   posicao int not null,
@@ -66,6 +67,12 @@ create policy "settings_update_admin" on julius.settings
 -- queue_entries: leitura publica (cliente acompanha fila em tempo real sem login)
 create policy "queue_select_public" on julius.queue_entries
   for select using (true);
+
+-- telefone é PII: anon não lê o dos outros (privilégio por coluna no REST).
+-- authenticated (painel admin) mantém select em tudo via default privileges.
+revoke select on julius.queue_entries from anon;
+grant select (id, nome, perfil_id, numero_musica, status, posicao, created_at)
+  on julius.queue_entries to anon;
 
 -- insert só via função join_queue (security definer) — bloqueia insert direto da anon key
 create policy "queue_insert_blocked" on julius.queue_entries
@@ -153,13 +160,15 @@ grant execute on function julius.esta_aberto() to anon, authenticated;
 create or replace function julius.join_queue(
   p_nome text,
   p_perfil text,
-  p_numero_musica text
+  p_numero_musica text,
+  p_telefone text
 ) returns julius.queue_entries
 language plpgsql
 security definer
 set search_path = julius
 as $$
 declare
+  v_tel text;
   v_count_pessoa int;
   v_tail_posicao int;
   v_tail_perfil text;
@@ -172,6 +181,12 @@ begin
   end if;
   if coalesce(btrim(p_perfil), '') = '' then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
+  end if;
+
+  -- só dígitos; exige 55 + DDD (2) + número (8 ou 9)
+  v_tel := regexp_replace(coalesce(p_telefone, ''), '\D', '', 'g');
+  if length(v_tel) not between 12 and 13 then
+    raise exception 'TELEFONE_INVALIDO' using errcode = 'P0001';
   end if;
 
   -- trava a fila inteira p/ essa transação: evita duas entradas
@@ -211,8 +226,8 @@ begin
     end if;
   end if;
 
-  insert into julius.queue_entries (nome, perfil_id, numero_musica, status, posicao)
-  values (btrim(p_nome), p_perfil, p_numero_musica, 'waiting', v_nova_posicao)
+  insert into julius.queue_entries (nome, perfil_id, telefone, numero_musica, status, posicao)
+  values (btrim(p_nome), p_perfil, v_tel, p_numero_musica, 'waiting', v_nova_posicao)
   returning * into v_row;
 
   return v_row;
@@ -220,8 +235,9 @@ end;
 $$;
 
 -- anon (cliente sem login) pode chamar a função, RLS interna dela cuida do resto
-grant execute on function julius.join_queue(text, text, text) to anon, authenticated;
+grant execute on function julius.join_queue(text, text, text, text) to anon, authenticated;
 
--- realtime
-alter publication supabase_realtime add table julius.queue_entries;
+-- realtime — queue_entries publica só as colunas públicas (telefone fica fora do stream)
+alter publication supabase_realtime add table julius.queue_entries
+  (id, nome, perfil_id, numero_musica, status, posicao, created_at);
 alter publication supabase_realtime add table julius.settings;

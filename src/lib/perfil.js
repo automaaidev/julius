@@ -8,6 +8,7 @@
 
 const ID_KEY = 'juliu_perfil_id'
 const NOME_KEY = 'juliu_perfil_nome'
+const TEL_KEY = 'juliu_perfil_tel'
 
 function randomId() {
   return `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
@@ -39,6 +40,23 @@ export function getPerfilNome() {
 export function setPerfilNome(nome) {
   try {
     localStorage.setItem(NOME_KEY, nome)
+  } catch {
+    /* ignore */
+  }
+}
+
+// telefone só serve pro admin avisar no WhatsApp (não é identidade na fila).
+export function getPerfilTel() {
+  try {
+    return localStorage.getItem(TEL_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setPerfilTel(tel) {
+  try {
+    localStorage.setItem(TEL_KEY, tel)
   } catch {
     /* ignore */
   }

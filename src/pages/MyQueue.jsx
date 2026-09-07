@@ -5,6 +5,7 @@ import {
   Mic2,
   UserRound,
   UsersRound,
+  Phone,
   ArrowLeft,
   Plus,
   X,
@@ -21,13 +22,15 @@ import { localDb } from '../lib/localDb'
 import { useSettings } from '../hooks/useSettings'
 import { abertoAgora } from '../lib/schedule'
 import { useQueue, activeRanked } from '../hooks/useQueue'
-import { getPerfilId, getPerfilNome, setPerfilNome } from '../lib/perfil'
+import { getPerfilId, getPerfilNome, setPerfilNome, getPerfilTel, setPerfilTel } from '../lib/perfil'
+import { normalizarTel } from '../lib/telefone'
 import './queue.css'
 
 const ERROS = {
   CASA_FECHADA: 'A casa está fechada no momento.',
   LIMITE_2_MUSICAS: 'Você já tem 2 músicas na fila. Espere uma terminar.',
   NOME_VAZIO: 'Coloque um nome.',
+  TELEFONE_INVALIDO: 'Confira o WhatsApp com DDD (ex: 11 91234-5678).',
   PERFIL_INVALIDO: 'Não foi possível te identificar. Recarregue a página.',
 }
 
@@ -39,8 +42,11 @@ export default function MyQueue() {
 
   const [perfilId] = useState(getPerfilId)
   const [nome, setNome] = useState(getPerfilNome())
-  // já se identificou nesse navegador -> pula direto pro resultado
-  const [passo, setPasso] = useState(getPerfilNome() ? 'resultado' : 'identificacao')
+  const [tel, setTel] = useState(getPerfilTel())
+  // já se identificou nesse navegador (nome + WhatsApp) -> pula pro resultado
+  const [passo, setPasso] = useState(
+    getPerfilNome() && getPerfilTel() ? 'resultado' : 'identificacao'
+  )
 
   const [mostrarForm, setMostrarForm] = useState(false)
   const [musicas, setMusicas] = useState([novaMusica()])
@@ -58,7 +64,13 @@ export default function MyQueue() {
 
   function continuar(e) {
     e.preventDefault()
+    if (!normalizarTel(tel)) {
+      setErro(ERROS.TELEFONE_INVALIDO)
+      return
+    }
+    setErro('')
     setPerfilNome(nome.trim())
+    setPerfilTel(tel.trim())
     setMostrarForm(false)
     setPasso('resultado')
   }
@@ -97,10 +109,11 @@ export default function MyQueue() {
       const parceiro = m.comParceiro ? m.parceiro.trim() : ''
       const nomeMusica = parceiro ? `${nome.trim()} e ${parceiro}` : nome.trim()
 
+      const telNorm = normalizarTel(tel)
       let error = null
       if (LOCAL) {
         try {
-          localDb.joinQueue({ nome: nomeMusica, perfil: perfilId, numero: m.numero.trim() })
+          localDb.joinQueue({ nome: nomeMusica, perfil: perfilId, numero: m.numero.trim(), telefone: telNorm })
         } catch (e) {
           error = { message: e.message }
         }
@@ -109,6 +122,7 @@ export default function MyQueue() {
           p_nome: nomeMusica,
           p_perfil: perfilId,
           p_numero_musica: m.numero.trim(),
+          p_telefone: telNorm,
         }))
       }
 
@@ -138,7 +152,7 @@ export default function MyQueue() {
           </Link>
           {passo === 'resultado' && (
             <button type="button" className="q-back" onClick={trocarNome}>
-              <ArrowLeft size={15} /> Trocar nome
+              <ArrowLeft size={15} /> Trocar dados
             </button>
           )}
         </div>
@@ -147,7 +161,7 @@ export default function MyQueue() {
           <h1>Minha fila</h1>
           <p>
             {passo === 'identificacao'
-              ? 'Seu nome abre sua fila — sem senha, sem cadastro.'
+              ? 'Nome + WhatsApp e sua fila abre — sem senha, sem cadastro.'
               : !loading && minhas.length === 0
                 ? `Oi, ${nome}! Vem pra fila e sobe no palco.`
                 : `Fila de ${nome}. Acompanhe sua vez em tempo real.`}
@@ -174,6 +188,24 @@ export default function MyQueue() {
                 autoFocus
               />
             </label>
+            <label className="q-field">
+              <span><Phone size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />WhatsApp</span>
+              <input
+                value={tel}
+                onChange={(e) => setTel(e.target.value.replace(/[^\d\s()+-]/g, '').slice(0, 16))}
+                inputMode="tel"
+                placeholder="Ex: 11 91234-5678"
+                required
+              />
+            </label>
+            <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>
+              A casa te chama no WhatsApp quando sua vez tá chegando.
+            </p>
+            {erro && (
+              <p className="q-error">
+                <AlertCircle size={16} /> {erro}
+              </p>
+            )}
             <button className="q-btn q-btn--primary" type="submit">
               Continuar <ChevronRight size={18} />
             </button>

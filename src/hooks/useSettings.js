@@ -19,12 +19,16 @@ export function useSettings() {
     if (LOCAL) return localDb.getSettings()
     return supabase ? null : MOCK_SETTINGS
   })
-  const [loading, setLoading] = useState(!LOCAL && Boolean(supabase))
+  const [loading, setLoading] = useState(LOCAL || Boolean(supabase))
 
   useEffect(() => {
     if (LOCAL) {
       const sync = () => setSettings(localDb.getSettings())
       sync()
+      localDb.ready.then(() => {
+        sync()
+        setLoading(false)
+      })
       return localDb.subscribe(sync)
     }
 

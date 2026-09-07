@@ -16,11 +16,14 @@ import {
   Trash2,
   BarChart3,
   CalendarClock,
+  MessageCircle,
 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { contarMusicas } from '../lib/stats'
+import { linkWhatsApp, formatTelBR } from '../lib/telefone'
+import { mensagemAviso, tipoAviso } from '../lib/avisos'
 import { abertoAgora } from '../lib/schedule'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
@@ -36,7 +39,7 @@ const DIAS = [
 export default function Dashboard() {
   const { signOut } = useAuth()
   const { settings, loading: loadingSettings } = useSettings()
-  const { entries, loading: loadingQueue } = useQueue()
+  const { entries, loading: loadingQueue } = useQueue({ withTelefone: true })
 
   return (
     <div className="q-page">
@@ -48,6 +51,9 @@ export default function Dashboard() {
           </span>
           <div className="adm-actions">
             <Link to="/" className="q-back"><ExternalLink size={14} /> Ver site</Link>
+            {LOCAL && (
+              <button type="button" className="q-back" onClick={() => localDb.reset()}>Resetar dados</button>
+            )}
             <button type="button" className="q-back" onClick={signOut}><LogOut size={14} /> Sair</button>
           </div>
         </div>
@@ -204,6 +210,12 @@ function QueuePanel({ entries }) {
     await supabase.from('queue_entries').update({ posicao: alvo.posicao }).eq('id', vizinho.id)
   }
 
+  // abre o WhatsApp do admin já na conversa do cliente, texto pronto
+  function avisar(e) {
+    const url = linkWhatsApp(e.telefone, mensagemAviso(tipoAviso(e), e))
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   return (
     <motion.div
       className="q-card adm-card"
@@ -225,6 +237,7 @@ function QueuePanel({ entries }) {
                 <span className={`adm-chip adm-chip--${e.status}`}>
                   {e.status === 'playing' ? 'no palco' : 'aguardando'}
                 </span>
+                {e.telefone && <span className="adm-item__tel">{formatTelBR(e.telefone)}</span>}
               </div>
             </div>
             <div className="adm-item__acts">
@@ -242,6 +255,15 @@ function QueuePanel({ entries }) {
               {e.status === 'playing' && (
                 <button className="q-btn q-btn--primary q-btn--sm" onClick={() => setStatus(e.id, 'done')}>
                   <Check size={14} /> Concluir
+                </button>
+              )}
+              {e.telefone && (e.rank <= 2 || e.status === 'playing') && (
+                <button
+                  className="q-btn q-btn--wa q-btn--sm"
+                  onClick={() => avisar(e)}
+                  title={tipoAviso(e) === 'vez' ? 'Avisar no WhatsApp: é a vez' : 'Avisar no WhatsApp: é o próximo'}
+                >
+                  <MessageCircle size={14} /> {tipoAviso(e) === 'vez' ? 'É a vez' : 'Avisar'}
                 </button>
               )}
               <button className="q-iconbtn" onClick={() => remover(e.id)} aria-label="Remover">

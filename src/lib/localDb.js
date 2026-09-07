@@ -1,117 +1,90 @@
-// Adaptador de fila 100% local (modo VITE_LOCAL).
+// Fila da casa em cima do SQLite do navegador (ver ./sqlite.js).
 //
-// Replica o comportamento do Supabase que o app usa:
-//  - tabela settings (status aberto/fechado + horário)
-//  - tabela queue_entries
-//  - função join_queue (mesmas regras da versão Postgres em supabase/schema.sql)
-//  - "realtime" via pub/sub (mesma aba) + evento `storage` (entre abas)
-//  - auth de admin fake (qualquer email/senha; sessão no localStorage)
+// Mantém a mesma superfície que o app já consumia do adaptador antigo:
+//  - getSettings / updateSettings
+//  - getQueue
+//  - joinQueue  (mesmas regras da função julius.join_queue do Postgres)
+//  - setEntryStatus / deleteEntry / swapPositions / reset
+//  - subscribe  (reatividade: mesma aba + entre abas)
+//  - ready      (promise que resolve quando o banco terminou de subir)
 //
-// Persistência: uma chave de localStorage. Sem servidor, sem rede.
+// Sem login: o painel é aberto. Dados são 100% fake, pra teste.
 
+import { subscribe, all, one, run, reseed, dbReady } from './sqlite'
 import { abertoAgora } from './schedule'
+import { normalizarTel } from './telefone'
 
-const DB_KEY = 'juliu_localdb'
 const SESSION_KEY = 'juliu_local_session'
-
-const SEED = {
-  settings: {
-    abertura_modo: 'auto', // 'auto' | 'aberto' | 'fechado'
-    horario_funcionamento: {
-      qui: '19:00-23:00',
-      sex: '19:00-01:00',
-      sab: '19:00-01:00',
-      dom: '18:00-23:00',
-    },
-  },
-  queue: [], // { id, nome, perfil_id, numero_musica, status, posicao, created_at }
-}
-
-function clone(x) {
-  return JSON.parse(JSON.stringify(x))
-}
-
-function load() {
-  try {
-    const raw = localStorage.getItem(DB_KEY)
-    if (raw) return { ...clone(SEED), ...JSON.parse(raw) }
-  } catch {
-    /* ignore */
-  }
-  return clone(SEED)
-}
-
-let db = load()
-const subs = new Set()
 const authSubs = new Set()
 
-function emit() {
-  subs.forEach((cb) => {
-    try {
-      cb()
-    } catch {
-      /* ignore */
-    }
-  })
+const DEFAULT_HORARIO = {
+  qui: '19:00-23:00',
+  sex: '19:00-01:00',
+  sab: '19:00-01:00',
+  dom: '18:00-23:00',
 }
 
-function persist() {
+function parseSettings(row) {
+  if (!row) {
+    return { id: 1, abertura_modo: 'auto', horario_funcionamento: DEFAULT_HORARIO }
+  }
+  let horario = DEFAULT_HORARIO
   try {
-    localStorage.setItem(DB_KEY, JSON.stringify(db))
+    horario = JSON.parse(row.horario_funcionamento) || DEFAULT_HORARIO
   } catch {
     /* ignore */
   }
-  emit()
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (e) => {
-    if (e.key === DB_KEY) {
-      db = load()
-      emit()
-    }
-  })
+  return { id: 1, abertura_modo: row.abertura_modo, horario_funcionamento: horario }
 }
 
 function ativos() {
-  return db.queue.filter((e) => e.status === 'waiting' || e.status === 'playing')
+  return all(
+    "SELECT * FROM queue_entries WHERE status IN ('waiting', 'playing') ORDER BY posicao ASC"
+  )
 }
 
 export const localDb = {
-  subscribe(cb) {
-    subs.add(cb)
-    return () => subs.delete(cb)
-  },
+  ready: dbReady,
+  subscribe,
 
   // ---- settings ----
   getSettings() {
-    return { id: 1, ...db.settings }
+    return parseSettings(one('SELECT * FROM settings WHERE id = 1'))
   },
+
   updateSettings(patch) {
-    db.settings = { ...db.settings, ...patch }
-    persist()
+    const next = { ...this.getSettings(), ...patch }
+    run(
+      `INSERT INTO settings (id, abertura_modo, horario_funcionamento)
+         VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         abertura_modo = excluded.abertura_modo,
+         horario_funcionamento = excluded.horario_funcionamento`,
+      [next.abertura_modo, JSON.stringify(next.horario_funcionamento)]
+    )
   },
 
   // ---- queue ----
   getQueue() {
-    return [...db.queue].sort((a, b) => a.posicao - b.posicao)
+    return all('SELECT * FROM queue_entries ORDER BY posicao ASC')
   },
 
   // mesma lógica da função julius.join_queue (Postgres)
-  joinQueue({ nome, perfil, numero }) {
+  joinQueue({ nome, perfil, numero, telefone }) {
     const n = String(nome || '').trim()
     const p = String(perfil || '').trim()
+    const tel = normalizarTel(telefone)
     if (!n) throw new Error('NOME_VAZIO')
     if (!p) throw new Error('PERFIL_INVALIDO')
-    if (!abertoAgora(db.settings)) throw new Error('CASA_FECHADA')
+    if (!tel) throw new Error('TELEFONE_INVALIDO')
+    if (!abertoAgora(this.getSettings())) throw new Error('CASA_FECHADA')
 
     const list = ativos()
     if (list.filter((e) => e.perfil_id === p).length >= 2) {
       throw new Error('LIMITE_2_MUSICAS')
     }
 
-    const ordenados = [...list].sort((a, b) => a.posicao - b.posicao)
-    const tail = ordenados[ordenados.length - 1]
+    const tail = list[list.length - 1]
     let novaPosicao
     if (!tail) {
       novaPosicao = 1
@@ -124,44 +97,52 @@ export const localDb = {
       id: crypto.randomUUID(),
       nome: n,
       perfil_id: p,
+      telefone: tel,
       numero_musica: String(numero).trim(),
       status: 'waiting',
       posicao: novaPosicao,
       created_at: new Date().toISOString(),
     }
-    db.queue.push(row)
-    persist()
+    run(
+      `INSERT INTO queue_entries
+         (id, nome, perfil_id, telefone, numero_musica, status, posicao, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        row.id,
+        row.nome,
+        row.perfil_id,
+        row.telefone,
+        row.numero_musica,
+        row.status,
+        row.posicao,
+        row.created_at,
+      ]
+    )
     return row
   },
 
   // ---- admin ----
   setEntryStatus(id, status) {
-    const e = db.queue.find((x) => x.id === id)
-    if (e) {
-      e.status = status
-      persist()
-    }
-  },
-  deleteEntry(id) {
-    db.queue = db.queue.filter((x) => x.id !== id)
-    persist()
-  },
-  swapPositions(idA, idB) {
-    const a = db.queue.find((x) => x.id === idA)
-    const b = db.queue.find((x) => x.id === idB)
-    if (a && b) {
-      const t = a.posicao
-      a.posicao = b.posicao
-      b.posicao = t
-      persist()
-    }
-  },
-  reset() {
-    db = clone(SEED)
-    persist()
+    run('UPDATE queue_entries SET status = ? WHERE id = ?', [status, id])
   },
 
-  // ---- auth fake ----
+  deleteEntry(id) {
+    run('DELETE FROM queue_entries WHERE id = ?', [id])
+  },
+
+  swapPositions(idA, idB) {
+    const a = one('SELECT posicao FROM queue_entries WHERE id = ?', [idA])
+    const b = one('SELECT posicao FROM queue_entries WHERE id = ?', [idB])
+    if (!a || !b) return
+    run('UPDATE queue_entries SET posicao = ? WHERE id = ?', [b.posicao, idA])
+    run('UPDATE queue_entries SET posicao = ? WHERE id = ?', [a.posicao, idB])
+  },
+
+  reset() {
+    reseed()
+  },
+
+  // ---- auth fake (modo local: qualquer email/senha entra) ----
   auth: {
     getSession() {
       try {

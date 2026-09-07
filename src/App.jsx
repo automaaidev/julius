@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import Home from './pages/Home'
 import QueueStatus from './pages/QueueStatus'
 import MyQueue from './pages/MyQueue'
@@ -25,6 +26,7 @@ export default function App() {
         />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      <Analytics />
     </HashRouter>
   )
 }
