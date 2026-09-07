@@ -17,28 +17,68 @@
 
 .adm-actions { display: flex; gap: 0.5rem; }
 
-/* layout: uma coluna no mobile, meio a meio no tablet/desktop */
-.adm-grid { display: grid; gap: 1rem; }
-.adm-col { display: grid; gap: 1rem; align-content: start; min-width: 0; }
-
-@media (min-width: 900px) {
-  .adm-grid {
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-    align-items: start;
-  }
-  .adm-col--queue { position: sticky; top: 1.5rem; }
-  .adm-col--queue .adm-card {
-    max-height: calc(100svh - 3rem);
-    overflow-y: auto;
-  }
-  /* card rolável clipa overflow-x -> esconde os entalhes do bilhete */
-  .adm-col--queue .adm-card::before,
-  .adm-col--queue .adm-card::after { display: none; }
+/* layout: coluna única, seções recolhíveis. Mesmo em cell, tablet e desktop. */
+.adm-stack {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 680px;
+  margin: 0 auto;
 }
 
-.adm-card { padding: 1.4rem 1.5rem; }
-.adm-col .q-card + .q-card { margin-top: 0; } /* espaçamento vem do gap do grid */
+/* seção recolhível (<details>) */
+.adm-sec {
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  overflow: hidden;
+}
+
+.adm-sec__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.2rem;
+  cursor: pointer;
+  list-style: none;
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-size: 0.8rem;
+  color: var(--luz-suave);
+  user-select: none;
+}
+
+.adm-sec__head::-webkit-details-marker { display: none; }
+
+.adm-sec__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.adm-sec__right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.adm-sec__chev {
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.adm-sec[open] .adm-sec__chev { transform: rotate(180deg); }
+
+.adm-sec__body { padding: 0 1.2rem 1.3rem; }
+.adm-sec__body > :first-child { margin-top: 0; }
+.adm-sec__body .adm-modos { margin-top: 0; }
+
+@media (max-width: 400px) {
+  .adm-sec__head { flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+  .adm-sec__right { order: 3; width: 100%; }
+}
 
 .adm-h2 {
   display: flex;
@@ -98,19 +138,20 @@
 .adm-status__badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
   font-family: 'Oswald', sans-serif;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .adm-status__badge--on { color: var(--luz); }
 .adm-status__badge--off { color: var(--pessego-escuro); }
 
 .adm-status__dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: currentColor;
 }

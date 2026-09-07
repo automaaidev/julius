@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import {
   ExternalLink,
   LogOut,
@@ -36,10 +35,36 @@ const DIAS = [
   ['sex', 'sexta'], ['sab', 'sábado'], ['dom', 'domingo'],
 ]
 
+const MODOS = [
+  ['auto', 'Automático', CalendarClock],
+  ['aberto', 'Forçar aberto', DoorOpen],
+  ['fechado', 'Forçar fechado', DoorClosed],
+]
+
+// seção recolhível — cabeçalho sempre visível, corpo abre/fecha no toque
+function Section({ icon: Icon, title, right, defaultOpen = false, children }) {
+  return (
+    <details className="adm-sec" open={defaultOpen}>
+      <summary className="adm-sec__head">
+        <span className="adm-sec__title">
+          {Icon && <Icon size={15} />}
+          {title}
+        </span>
+        {right && <span className="adm-sec__right">{right}</span>}
+        <ChevronDown size={16} className="adm-sec__chev" />
+      </summary>
+      <div className="adm-sec__body">{children}</div>
+    </details>
+  )
+}
+
 export default function Dashboard() {
   const { signOut } = useAuth()
   const { settings, loading: loadingSettings } = useSettings()
   const { entries, loading: loadingQueue } = useQueue({ withTelefone: true })
+
+  const ranked = activeRanked(entries)
+  const aberto = settings ? abertoAgora(settings) : false
 
   return (
     <div className="q-page">
@@ -58,21 +83,51 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="adm-grid">
-          <div className="adm-col">
-            {!loadingQueue && <StatsPanel entries={entries} />}
-            {!loadingSettings && settings && <SettingsPanel settings={settings} />}
-          </div>
-          <div className="adm-col adm-col--queue">
-            {!loadingQueue && <QueuePanel entries={entries} />}
-          </div>
+        <div className="adm-stack">
+          {/* 1 — casa aberta */}
+          {!loadingSettings && settings && (
+            <Section
+              icon={aberto ? DoorOpen : DoorClosed}
+              title="Casa"
+              defaultOpen
+              right={
+                <span className={`adm-status__badge ${aberto ? 'adm-status__badge--on' : 'adm-status__badge--off'}`}>
+                  <span className="adm-status__dot" />
+                  {aberto ? 'Aberta agora' : 'Fechada agora'}
+                </span>
+              }
+            >
+              <ModoControls settings={settings} />
+            </Section>
+          )}
+
+          {/* 2 — fila */}
+          <Section
+            icon={ListMusic}
+            title={`Fila · ${ranked.length} na vez`}
+            defaultOpen
+          >
+            {loadingQueue ? <p className="q-note">Carregando…</p> : <QueueBody entries={entries} />}
+          </Section>
+
+          {/* 3 — horário de funcionamento */}
+          {!loadingSettings && settings && (
+            <Section icon={Clock} title="Horário de funcionamento">
+              <HorarioForm settings={settings} />
+            </Section>
+          )}
+
+          {/* 4 — pedidos de música */}
+          <Section icon={BarChart3} title="Pedidos de música">
+            {loadingQueue ? <p className="q-note">Carregando…</p> : <StatsBody entries={entries} />}
+          </Section>
         </div>
       </div>
     </div>
   )
 }
 
-function StatsPanel({ entries }) {
+function StatsBody({ entries }) {
   const s = contarMusicas(entries)
   const tiles = [
     ['Hoje', s.dia],
@@ -81,41 +136,54 @@ function StatsPanel({ entries }) {
     ['Ano', s.ano],
   ]
   return (
-    <motion.div
-      className="q-card adm-card"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      <p className="adm-h2"><BarChart3 size={15} /> Músicas pedidas</p>
-      <div className="adm-stats">
-        {tiles.map(([label, n]) => (
-          <div key={label} className="adm-stat">
-            <b>{n}</b>
-            <span>{label}</span>
-          </div>
-        ))}
-      </div>
-    </motion.div>
+    <div className="adm-stats">
+      {tiles.map(([label, n]) => (
+        <div key={label} className="adm-stat">
+          <b>{n}</b>
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
-const MODOS = [
-  ['auto', 'Automático', CalendarClock],
-  ['aberto', 'Forçar aberto', DoorOpen],
-  ['fechado', 'Forçar fechado', DoorClosed],
-]
-
-function SettingsPanel({ settings }) {
-  const [horario, setHorario] = useState(settings.horario_funcionamento || {})
-  const [salvando, setSalvando] = useState(false)
+function ModoControls({ settings }) {
   const modo = settings.abertura_modo || 'auto'
-  const aberto = abertoAgora(settings)
 
   async function setModo(novo) {
     if (novo === modo) return
     if (LOCAL) return localDb.updateSettings({ abertura_modo: novo })
     await supabase.from('settings').update({ abertura_modo: novo }).eq('id', 1)
   }
+
+  return (
+    <>
+      <div className="adm-modos">
+        {MODOS.map(([val, label, Icon]) => (
+          <button
+            key={val}
+            type="button"
+            className={`adm-modo ${modo === val ? 'adm-modo--on' : ''}`}
+            onClick={() => setModo(val)}
+          >
+            <Icon size={15} /> {label}
+          </button>
+        ))}
+      </div>
+      <p className="adm-modo__hint">
+        {modo === 'auto'
+          ? 'Abre e fecha sozinho pelo horário de funcionamento.'
+          : modo === 'aberto'
+            ? 'Casa forçada aberta — ignora o horário até você voltar pra Automático.'
+            : 'Casa forçada fechada — ignora o horário até você voltar pra Automático.'}
+      </p>
+    </>
+  )
+}
+
+function HorarioForm({ settings }) {
+  const [horario, setHorario] = useState(settings.horario_funcionamento || {})
+  const [salvando, setSalvando] = useState(false)
 
   async function salvarHorario(e) {
     e.preventDefault()
@@ -126,68 +194,27 @@ function SettingsPanel({ settings }) {
   }
 
   return (
-    <>
-      <motion.div
-        className="q-card adm-card"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <div className="adm-status">
-          <span className={`adm-status__badge ${aberto ? 'adm-status__badge--on' : 'adm-status__badge--off'}`}>
-            <span className="adm-status__dot" />
-            {aberto ? 'Casa aberta agora' : 'Casa fechada agora'}
-          </span>
-        </div>
-        <div className="adm-modos">
-          {MODOS.map(([val, label, Icon]) => (
-            <button
-              key={val}
-              type="button"
-              className={`adm-modo ${modo === val ? 'adm-modo--on' : ''}`}
-              onClick={() => setModo(val)}
-            >
-              <Icon size={15} /> {label}
-            </button>
-          ))}
-        </div>
-        <p className="adm-modo__hint">
-          {modo === 'auto'
-            ? 'Abre e fecha sozinho pelo horário de funcionamento abaixo.'
-            : modo === 'aberto'
-              ? 'Casa forçada aberta — ignora o horário até você voltar pra Automático.'
-              : 'Casa forçada fechada — ignora o horário até você voltar pra Automático.'}
-        </p>
-      </motion.div>
-
-      <motion.form
-        className="q-card adm-card"
-        onSubmit={salvarHorario}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.05 }}
-      >
-        <p className="adm-h2"><Clock size={15} /> Horário de funcionamento</p>
-        <div className="adm-hlist">
-          {DIAS.map(([key, label]) => (
-            <label key={key} className="adm-hrow">
-              <span>{label}</span>
-              <input
-                value={horario[key] || ''}
-                placeholder="19:00-23:00  ou  fechado"
-                onChange={(e) => setHorario({ ...horario, [key]: e.target.value })}
-              />
-            </label>
-          ))}
-        </div>
-        <button className="q-btn q-btn--ghost q-btn--sm" type="submit" disabled={salvando}>
-          <Save size={15} /> {salvando ? 'Salvando…' : 'Salvar horário'}
-        </button>
-      </motion.form>
-    </>
+    <form onSubmit={salvarHorario}>
+      <div className="adm-hlist">
+        {DIAS.map(([key, label]) => (
+          <label key={key} className="adm-hrow">
+            <span>{label}</span>
+            <input
+              value={horario[key] || ''}
+              placeholder="19:00-23:00  ou  fechado"
+              onChange={(e) => setHorario({ ...horario, [key]: e.target.value })}
+            />
+          </label>
+        ))}
+      </div>
+      <button className="q-btn q-btn--ghost q-btn--sm" type="submit" disabled={salvando}>
+        <Save size={15} /> {salvando ? 'Salvando…' : 'Salvar horário'}
+      </button>
+    </form>
   )
 }
 
-function QueuePanel({ entries }) {
+function QueueBody({ entries }) {
   const ranked = activeRanked(entries)
   const done = entries.filter((e) => e.status === 'done')
 
@@ -217,15 +244,10 @@ function QueuePanel({ entries }) {
   }
 
   return (
-    <motion.div
-      className="q-card adm-card"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-    >
-      <p className="adm-h2"><ListMusic size={15} /> Fila · {ranked.length} na vez</p>
-
-      {ranked.length === 0 && <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>Fila vazia.</p>}
+    <>
+      {ranked.length === 0 && (
+        <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>Fila vazia.</p>
+      )}
 
       <div className="adm-queue">
         {ranked.map((e, i) => (
@@ -282,6 +304,6 @@ function QueuePanel({ entries }) {
           ))}
         </details>
       )}
-    </motion.div>
+    </>
   )
 }
