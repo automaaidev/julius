@@ -1,47 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, Save, AlertCircle, Flame, Star, StarOff, Library, Download, Search, Check } from 'lucide-react'
-import { supabase } from '../lib/supabaseClient'
-import { LOCAL } from '../lib/flags'
-import { localDb } from '../lib/localDb'
-import { catalogoMudou, contarCatalogo, definirDestaque, importarCatalogo } from '../lib/catalogo'
+import { AlertCircle, Flame, Star, StarOff, Library, Download, Search, Check, Plus } from 'lucide-react'
+import { contarCatalogo, definirDestaque, importarCatalogo, aoMudarCatalogo } from '../lib/catalogo'
 import { useSugestoes } from '../hooks/useSugestoes'
 import BuscaMusicas from '../components/BuscaMusicas'
+import CardapioAdmin from './CardapioAdmin'
 import { mapErroAdmin } from './erros'
 
 const fmt = (n) => n.toLocaleString('pt-BR')
 
-// Aba Músicas: o catálogo do aparelho (busca de número por nome) e as sugestões
-// da tela do cliente. As sugestões são as mais cantadas (contagem automática da
-// fila) + as que ficam fixadas aqui (estrela). O número sozinho não diz nada pra
-// quem é de primeira viagem — por isso o nome.
+// Aba Músicas: o catálogo do aparelho (importar), o gerenciador do cardápio
+// (adicionar, editar e excluir músicas) e as sugestões da tela do cliente. As
+// sugestões são as mais cantadas (contagem automática da fila) + as que ficam
+// fixadas com a estrela. O número sozinho não diz nada pra quem é de primeira
+// viagem — por isso o nome.
 export default function MusicasPanel() {
   const { sugestoes, loading, refetch } = useSugestoes(100)
-  const [numero, setNumero] = useState('')
-  const [titulo, setTitulo] = useState('')
   const [erro, setErro] = useState('')
-  const [salvando, setSalvando] = useState(false)
   const [buscando, setBuscando] = useState(false)
-
-  // destaque: true = fixa nas sugestões (formulário de baixo); sem isso só muda o nome
-  async function salvar(n, t, { destaque = false } = {}) {
-    setErro('')
-    try {
-      if (LOCAL) {
-        localDb.salvarMusica(n, t)
-        if (destaque) localDb.definirDestaque(n, true)
-      } else {
-        const linha = destaque ? { numero: n, titulo: t, destaque: true } : { numero: n, titulo: t }
-        const { error } = await supabase.from('musicas').upsert(linha, { onConflict: 'numero' })
-        if (error) throw error
-      }
-      catalogoMudou() // o nome mudou: o cardápio e a fila não podem mostrar o antigo
-      refetch()
-      return true
-    } catch (e) {
-      setErro(mapErroAdmin(e.message))
-      return false
-    }
-  }
+  const [numeroParaAdicionar, setNumeroParaAdicionar] = useState(null)
+  const [versaoLista, setVersaoLista] = useState(0) // muda após importar: a lista do gerenciador recarrega
 
   async function fixar(n, valor) {
     setErro('')
@@ -53,48 +30,20 @@ export default function MusicasPanel() {
     }
   }
 
-  async function adicionar(e) {
-    e.preventDefault()
-    setSalvando(true)
-    const ok = await salvar(numero.trim(), titulo.trim(), { destaque: true })
-    setSalvando(false)
-    if (ok) {
-      setNumero('')
-      setTitulo('')
-    }
-  }
+  const numeroUsado = useCallback(() => setNumeroParaAdicionar(null), [])
 
   return (
     <>
-      <Catalogo onBuscar={() => setBuscando(true)} />
+      <Catalogo onBuscar={() => setBuscando(true)} onImportado={() => setVersaoLista((v) => v + 1)} />
+
+      <CardapioAdmin key={versaoLista} onMudou={refetch} numeroParaAdicionar={numeroParaAdicionar} onNumeroUsado={numeroUsado} />
 
       <div className="q-card">
         <h3 className="adm-h2"><Flame size={15} /> Sugestões de músicas</h3>
         <p className="adm-modo__desc">
           As mais cantadas aparecem pra quem entra no site e não sabe o que pedir. Fixe com a estrela as que você
-          quer sempre sugerir, ou adicione abaixo uma música que não esteja no catálogo.
+          quer sempre sugerir — dá pra fixar também na lista de músicas acima.
         </p>
-
-        <form className="adm-mus-add" onSubmit={adicionar}>
-          <input
-            value={numero}
-            onChange={(e) => setNumero(e.target.value.replace(/\D/g, '').slice(0, 5))}
-            inputMode="numeric"
-            placeholder="Nº"
-            aria-label="Número da música"
-            required
-          />
-          <input
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value.slice(0, 120))}
-            placeholder="Nome da música"
-            aria-label="Nome da música"
-            required
-          />
-          <button className="q-btn q-btn--primary q-btn--sm" type="submit" disabled={salvando}>
-            <Plus size={15} /> Adicionar
-          </button>
-        </form>
 
         {erro && (
           <p className="q-error" style={{ marginTop: '0.7rem' }}>
@@ -106,13 +55,41 @@ export default function MusicasPanel() {
           <p className="q-note">Carregando…</p>
         ) : sugestoes.length === 0 ? (
           <p className="q-note q-note--soft" style={{ textAlign: 'left', marginTop: '1rem' }}>
-            Nada por aqui ainda. Conforme as músicas forem cantadas elas aparecem na lista; ou busque no catálogo e
-            fixe as que você quer sugerir.
+            Nada por aqui ainda. Conforme as músicas forem cantadas elas aparecem na lista; ou fixe músicas do cardápio
+            com a estrela.
           </p>
         ) : (
           <ul className="adm-mus-list">
             {sugestoes.map((s) => (
-              <Linha key={`${s.numero}:${s.titulo ?? ''}`} musica={s} onSalvar={salvar} onFixar={fixar} />
+              <li key={s.numero} className="adm-mus-item">
+                <b className="adm-mus-item__num">Nº {s.numero}</b>
+                <span className="adm-mus-item__nome">
+                  {s.titulo ? (
+                    <>
+                      {s.titulo}
+                      {s.artista && <i> — {s.artista}</i>}
+                    </>
+                  ) : (
+                    <>
+                      <em>sem nome no cardápio</em>
+                      <button type="button" className="q-linkbtn adm-mus-item__dar" onClick={() => setNumeroParaAdicionar(s.numero)}>
+                        <Plus size={12} /> adicionar ao cardápio
+                      </button>
+                    </>
+                  )}
+                </span>
+                <span className="adm-mus-item__vezes">{s.vezes > 0 ? `${s.vezes}× cantada` : 'nunca cantada'}</span>
+                <button
+                  type="button"
+                  className={`q-iconbtn ${s.destaque ? 'is-fixada' : ''}`}
+                  onClick={() => fixar(s.numero, !s.destaque)}
+                  aria-label={s.destaque ? 'Tirar das sugestões fixas' : 'Fixar nas sugestões'}
+                  aria-pressed={!!s.destaque}
+                  title={s.destaque ? 'Fixada — toque pra soltar' : 'Fixar nas sugestões'}
+                >
+                  {s.destaque ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}
+                </button>
+              </li>
             ))}
           </ul>
         )}
@@ -142,9 +119,10 @@ export default function MusicasPanel() {
 }
 
 // Catálogo do aparelho: quantas músicas estão carregadas + importar/atualizar.
-function Catalogo({ onBuscar }) {
+function Catalogo({ onBuscar, onImportado }) {
   const [total, setTotal] = useState(null) // null = ainda não sabe
   const [progresso, setProgresso] = useState(null) // { feito, total } enquanto importa
+  const [confirmando, setConfirmando] = useState(false)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
 
@@ -156,18 +134,21 @@ function Catalogo({ onBuscar }) {
     }
   }, [])
 
+  // conta de novo quando o catálogo muda (música adicionada/excluída/importação)
   useEffect(() => {
     contar()
+    return aoMudarCatalogo(contar)
   }, [contar])
 
   async function importar() {
+    setConfirmando(false)
     setErro('')
     setOk('')
     setProgresso({ feito: 0, total: 0 })
     try {
       const n = await importarCatalogo((feito, tot) => setProgresso({ feito, total: tot }))
       setOk(`${fmt(n)} músicas carregadas.`)
-      await contar()
+      onImportado?.()
     } catch (e) {
       setErro(mapErroAdmin(e.message))
     } finally {
@@ -191,13 +172,35 @@ function Catalogo({ onBuscar }) {
       </p>
 
       <div className="adm-cat__acts">
-        <button type="button" className="q-btn q-btn--primary q-btn--sm" onClick={importar} disabled={importando}>
-          <Download size={15} /> {importando ? 'Importando…' : total ? 'Atualizar catálogo' : 'Importar catálogo'}
+        <button
+          type="button"
+          className="q-btn q-btn--primary q-btn--sm"
+          onClick={() => (total ? setConfirmando(true) : importar())}
+          disabled={importando}
+        >
+          <Download size={15} /> {importando ? 'Importando…' : total ? 'Recarregar lista original' : 'Importar catálogo'}
         </button>
         <button type="button" className="q-btn q-btn--ghost q-btn--sm" onClick={onBuscar} disabled={importando}>
           <Search size={15} /> Ver cardápio
         </button>
       </div>
+
+      {confirmando && (
+        <div className="q-warn" role="alert">
+          <span>
+            Recarregar a lista original do aparelho <b>desfaz o que você mexeu</b>: músicas excluídas voltam e nomes
+            editados são sobrescritos. Músicas que você adicionou por conta própria continuam. Continuar?
+          </span>
+          <div className="q-cancel__acts">
+            <button type="button" className="q-btn q-btn--primary q-btn--sm" onClick={importar}>
+              Sim, recarregar
+            </button>
+            <button type="button" className="q-btn q-btn--ghost q-btn--sm" onClick={() => setConfirmando(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {importando && (
         <div className="adm-cat__barra" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Importando catálogo">
@@ -217,48 +220,5 @@ function Catalogo({ onBuscar }) {
         </p>
       )}
     </div>
-  )
-}
-
-function Linha({ musica, onSalvar, onFixar }) {
-  const [titulo, setTitulo] = useState(musica.titulo ?? '')
-  const mudou = titulo.trim() !== (musica.titulo ?? '')
-
-  async function salvarTitulo(e) {
-    e.preventDefault()
-    const t = titulo.trim()
-    if (!t || !mudou) return
-    await onSalvar(musica.numero, t)
-  }
-
-  return (
-    <li className="adm-mus-item">
-      <b className="adm-mus-item__num">Nº {musica.numero}</b>
-      <form className="adm-mus-item__form" onSubmit={salvarTitulo}>
-        <input
-          value={titulo}
-          onChange={(e) => setTitulo(e.target.value.slice(0, 120))}
-          placeholder="Dar um nome…"
-          aria-label={`Nome da música ${musica.numero}`}
-        />
-        {mudou && titulo.trim() && (
-          <button type="submit" className="q-iconbtn" aria-label="Salvar nome">
-            <Save size={14} />
-          </button>
-        )}
-      </form>
-      {musica.artista && <span className="adm-mus-item__artista">{musica.artista}</span>}
-      <span className="adm-mus-item__vezes">{musica.vezes > 0 ? `${musica.vezes}× cantada` : 'nunca cantada'}</span>
-      <button
-        type="button"
-        className={`q-iconbtn ${musica.destaque ? 'is-fixada' : ''}`}
-        onClick={() => onFixar(musica.numero, !musica.destaque)}
-        aria-label={musica.destaque ? 'Tirar das sugestões fixas' : 'Fixar nas sugestões'}
-        aria-pressed={!!musica.destaque}
-        title={musica.destaque ? 'Fixada — toque pra soltar' : 'Fixar nas sugestões'}
-      >
-        {musica.destaque ? <Star size={14} fill="currentColor" /> : <StarOff size={14} />}
-      </button>
-    </li>
   )
 }

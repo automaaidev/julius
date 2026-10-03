@@ -7,6 +7,8 @@ const MAPA = {
   NOME_INVALIDO: 'Coloca um nome de 1 a 24 letras.',
   NUMERO_INVALIDO: 'O número da música tem de 1 a 5 dígitos.',
   TITULO_INVALIDO: 'O nome da música tem de 1 a 120 letras.',
+  ARTISTA_INVALIDO: 'O nome do cantor pode ter até 120 letras.',
+  CODIGO_EXISTE: 'Já existe uma música com esse código. Edite a que já está no cardápio.',
   CASA_FECHADA: 'A casa está fechada agora. Muda pra "Forçar aberto" na aba Casa pra incluir.',
   NAO_AUTORIZADO: 'Sem permissão. Sai e entra no painel de novo.',
 }

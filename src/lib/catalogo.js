@@ -166,3 +166,68 @@ export async function definirDestaque(numero, valor) {
   const { error } = await supabase.from('musicas').update({ destaque: valor }).eq('numero', numero)
   if (error) throw error
 }
+
+// ---- admin: adicionar, editar e excluir músicas do cardápio ----
+// Erros saem como códigos (NUMERO_INVALIDO, TITULO_INVALIDO, ARTISTA_INVALIDO,
+// CODIGO_EXISTE) — o painel traduz em admin/erros.js.
+
+const LIMITE_TEXTO = 120
+
+function validar({ numero, titulo, artista, categoria }, { comNumero }) {
+  const dados = {
+    titulo: String(titulo ?? '').trim(),
+    artista: String(artista ?? '').trim() || null,
+    categoria: CATEGORIAS.includes(categoria) ? categoria : null,
+  }
+  if (dados.titulo.length < 1 || dados.titulo.length > LIMITE_TEXTO) throw new Error('TITULO_INVALIDO')
+  if (dados.artista && dados.artista.length > LIMITE_TEXTO) throw new Error('ARTISTA_INVALIDO')
+  if (comNumero) {
+    dados.numero = String(numero ?? '').trim()
+    if (!/^[0-9]{1,5}$/.test(dados.numero)) throw new Error('NUMERO_INVALIDO')
+  }
+  return dados
+}
+
+function traduzir(error) {
+  if (error?.code === '23505') return new Error('CODIGO_EXISTE')
+  if (error?.code === '23514') return new Error(/titulo/i.test(error.message) ? 'TITULO_INVALIDO' : 'NUMERO_INVALIDO')
+  return error
+}
+
+export async function adicionarMusicaCardapio(campos) {
+  const dados = validar(campos, { comNumero: true })
+  if (LOCAL) {
+    await localDb.ready
+    localDb.inserirMusica(dados)
+  } else {
+    const { error } = await supabase.from('musicas').insert(dados)
+    if (error) throw traduzir(error)
+  }
+  catalogoMudou()
+  return dados
+}
+
+// o código não muda aqui (fila e caderninho guardam o número): código errado = excluir e adicionar de novo
+export async function atualizarMusicaCardapio(numero, campos) {
+  const dados = validar(campos, { comNumero: false })
+  if (LOCAL) {
+    await localDb.ready
+    localDb.atualizarMusica(numero, dados)
+  } else {
+    const { error } = await supabase.from('musicas').update(dados).eq('numero', numero)
+    if (error) throw traduzir(error)
+  }
+  catalogoMudou()
+  return dados
+}
+
+export async function excluirMusicaCardapio(numero) {
+  if (LOCAL) {
+    await localDb.ready
+    localDb.excluirMusica(numero)
+  } else {
+    const { error } = await supabase.from('musicas').delete().eq('numero', numero)
+    if (error) throw traduzir(error)
+  }
+  catalogoMudou()
+}

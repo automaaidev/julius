@@ -49,5 +49,18 @@ export function useBuscaMusicas(q, categoria, ordem) {
     })
   }, [filtro, categoria, ordem])
 
-  return { ...estado, filtrando: filtro !== '', carregarMais, temMais: estado.itens.length < estado.total }
+  // edição/exclusão no painel: ajusta a lista na tela sem recarregar (nem voltar pro topo).
+  // patch = campos novos da música; null = tirou da lista
+  const ajustarItem = useCallback((numero, patch) => {
+    setEstado((e) => {
+      const existe = e.itens.some((m) => m.numero === numero)
+      if (!existe) return e
+      const itens = patch === null ? e.itens.filter((m) => m.numero !== numero) : e.itens.map((m) => (m.numero === numero ? { ...m, ...patch } : m))
+      const total = patch === null ? Math.max(0, e.total - 1) : e.total
+      atual.current = { ...atual.current, itens: itens.length, total }
+      return { ...e, itens, total }
+    })
+  }, [])
+
+  return { ...estado, filtrando: filtro !== '', carregarMais, ajustarItem, temMais: estado.itens.length < estado.total }
 }

@@ -668,3 +668,98 @@
 .adm-cat__barra span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(135deg, var(--luz-suave), var(--luz)); transition: width 0.2s; }
 .adm-cat__barra small { position: relative; display: block; text-align: center; line-height: 20px; font-size: 0.72rem; font-weight: 600; color: var(--texto-claro); mix-blend-mode: difference; }
 .adm-cat__ok { display: flex; align-items: center; gap: 0.4rem; margin: 0.8rem 0 0; font-size: 0.85rem; color: var(--luz-suave); }
+
+/* ---- gerenciar músicas do cardápio (aba Músicas) ---- */
+.adm-cm__form {
+  display: grid;
+  gap: 0.8rem;
+  padding: 0.9rem;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.adm-cm__campos { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.adm-cm__campo { display: grid; gap: 0.3rem; flex: 1 1 140px; min-width: 0; align-content: start; }
+.adm-cm__campo--num { flex: 0 0 96px; }
+.adm-cm__campo--grande { flex: 2 1 220px; }
+
+.adm-cm__campo > span {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: var(--luz-suave);
+}
+
+.adm-cm select {
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: var(--palco);
+  color: var(--texto-claro);
+  font: 400 1rem var(--font-body);
+}
+
+.adm-cm select:focus { outline: 2px solid var(--luz); outline-offset: 1px; }
+
+.adm-cm__acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.adm-cm__filtros { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.2rem 0 0.5rem; }
+.adm-cm__busca { position: relative; flex: 2 1 220px; min-width: 0; }
+.adm-cm__busca svg { position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--pessego-escuro); pointer-events: none; }
+.adm-cm__busca input { padding-left: 2.5rem; }
+.adm-cm__filtros > select { flex: 1 1 170px; }
+
+.adm-cm__status { margin: 0 0 0.6rem; font-size: 0.8rem; color: var(--pessego-escuro); }
+
+.adm-cm__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+
+.adm-cm__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.adm-cm__item.is-editando { display: block; border-color: var(--luz); }
+
+.adm-cm__num {
+  min-width: 58px;
+  font-family: 'Bebas Neue', 'Oswald', sans-serif;
+  font-size: 1.25rem;
+  letter-spacing: 0.03em;
+  color: var(--luz-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+.adm-cm__txt { flex: 1; min-width: 160px; display: grid; line-height: 1.25; }
+.adm-cm__txt b { font-size: 0.93rem; font-weight: 600; color: var(--pessego); overflow-wrap: anywhere; }
+.adm-cm__txt span { font-size: 0.78rem; color: var(--pessego-escuro); overflow-wrap: anywhere; }
+
+.adm-cm__txt i {
+  margin-left: 0.5rem;
+  font-style: normal;
+  font-size: 0.64rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.adm-cm__botoes { display: inline-flex; gap: 0.35rem; flex-shrink: 0; }
+.adm-cm__botoes .q-iconbtn { width: 32px; height: 32px; }
+.adm-cm__confirma { flex-basis: 100%; }
+.adm-cm__codigo { margin: 0; font-family: 'Oswald', sans-serif; letter-spacing: 0.06em; color: var(--luz-suave); }
+.adm-cm__mais { display: flex; justify-content: center; margin-top: 0.9rem; }
+
+/* sugestões: nome vindo do cardápio */
+.adm-mus-item__nome { flex: 1; min-width: 160px; font-size: 0.92rem; overflow-wrap: anywhere; }
+.adm-mus-item__nome i { font-style: normal; color: var(--pessego-escuro); font-size: 0.8rem; }
+.adm-mus-item__nome em { font-style: normal; color: var(--pessego-escuro); opacity: 0.8; }
+.adm-mus-item__dar { display: inline-flex; align-items: center; gap: 0.25rem; margin: 0 0 0 0.6rem; font-size: 0.78rem; }
+.adm-cm__item.is-editando .adm-cm__form { padding: 0; border: 0; background: none; }

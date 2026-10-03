@@ -749,7 +749,7 @@ create or replace function julius.buscar_musicas(
   p_offset int default 0,
   p_ordem text default 'titulo'
 )
-returns table (numero text, titulo text, artista text, categoria text, total bigint)
+returns table (numero text, titulo text, artista text, categoria text, destaque boolean, total bigint)
 language plpgsql
 stable
 security definer
@@ -780,14 +780,14 @@ begin
 
     if p_ordem = 'artista' then
       return query
-        select m.numero, m.titulo, m.artista, m.categoria, v_total
+        select m.numero, m.titulo, m.artista, m.categoria, m.destaque, v_total
           from julius.musicas m
          where p_categoria is null or m.categoria = p_categoria
          order by m.artista_norm, m.titulo_norm, m.numero
          limit v_limite offset v_offset;
     else
       return query
-        select m.numero, m.titulo, m.artista, m.categoria, v_total
+        select m.numero, m.titulo, m.artista, m.categoria, m.destaque, v_total
           from julius.musicas m
          where p_categoria is null or m.categoria = p_categoria
          order by m.titulo_norm, m.numero
@@ -815,7 +815,7 @@ begin
            )
          )
     )
-    select a.numero, a.titulo, a.artista, a.categoria, count(*) over ()
+    select a.numero, a.titulo, a.artista, a.categoria, a.destaque, count(*) over ()
       from achadas a
      order by (a.numero = v_txt) desc,
               (a.busca like v_txt || '%') desc,

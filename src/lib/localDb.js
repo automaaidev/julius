@@ -365,7 +365,7 @@ export const localDb = {
       params.push(`${termo}%`, ...palavras.map((w) => `%${w}%`))
     }
     const rows = all(
-      `SELECT numero, titulo, artista, categoria, busca FROM musicas${condicoes.length ? ` WHERE ${condicoes.join(' AND ')}` : ''}`,
+      `SELECT numero, titulo, artista, categoria, destaque, busca FROM musicas${condicoes.length ? ` WHERE ${condicoes.join(' AND ')}` : ''}`,
       params
     ).map((m) => ({ ...m, chaveTitulo: normalizar(m.titulo), chaveArtista: normalizar(m.artista ?? '') }))
 
@@ -378,7 +378,13 @@ export const localDb = {
     )
     const pagina = rows.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(1, Math.min(limite, 100)))
     return {
-      itens: pagina.map(({ numero, titulo, artista, categoria: cat }) => ({ numero, titulo, artista, categoria: cat })),
+      itens: pagina.map(({ numero, titulo, artista, categoria: cat, destaque }) => ({
+        numero,
+        titulo,
+        artista,
+        categoria: cat,
+        destaque: Number(destaque) === 1,
+      })),
       total: rows.length,
     }
   },
@@ -424,6 +430,29 @@ export const localDb = {
        ON CONFLICT(numero) DO UPDATE SET titulo = excluded.titulo, busca = excluded.busca`,
       [n, t, normalizar(`${t} ${existente?.artista ?? ''}`), new Date().toISOString()]
     )
+  },
+
+  // admin: adicionar / editar / excluir música do cardápio (espelha insert/update/delete em julius.musicas)
+  inserirMusica({ numero, titulo, artista, categoria }) {
+    if (one('SELECT 1 AS x FROM musicas WHERE numero = ?', [numero])) throw new Error('CODIGO_EXISTE')
+    run(
+      'INSERT INTO musicas (numero, titulo, artista, categoria, destaque, busca, created_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
+      [numero, titulo, artista, categoria, normalizar(`${titulo} ${artista ?? ''}`), new Date().toISOString()]
+    )
+  },
+
+  atualizarMusica(numero, { titulo, artista, categoria }) {
+    run('UPDATE musicas SET titulo = ?, artista = ?, categoria = ?, busca = ? WHERE numero = ?', [
+      titulo,
+      artista,
+      categoria,
+      normalizar(`${titulo} ${artista ?? ''}`),
+      numero,
+    ])
+  },
+
+  excluirMusica(numero) {
+    run('DELETE FROM musicas WHERE numero = ?', [numero])
   },
 
   definirDestaque(numero, valor) {
