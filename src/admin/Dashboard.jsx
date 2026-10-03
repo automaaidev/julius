@@ -17,6 +17,8 @@ import ChatPanel from './ChatPanel'
 import CasaPanel from './CasaPanel'
 import MusicasPanel from './MusicasPanel'
 import ProximasBar from './ProximasBar'
+import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
+import { copiarTexto } from '../lib/clipboard'
 import '../pages/queue.css'
 import '../pages/chat.css'
 import './admin.css'
@@ -40,6 +42,7 @@ export default function Dashboard() {
   const [aba, setAba] = useState('fila')
   const [chatAberto, setChatAberto] = useState(null)
   const [erroPalco, setErroPalco] = useState('')
+  const [buscando, setBuscando] = useState(false)
 
   const ranked = activeRanked(entries)
   const tocando = ranked.find((e) => e.status === 'playing')
@@ -104,12 +107,19 @@ export default function Dashboard() {
   return (
     <div className="q-page">
       <div className="adm-shell">
+        {LOCAL && (
+          <p className="q-local" role="status">
+            Modo teste — dados falsos deste navegador, não o banco real. Pra usar o Supabase, configure
+            VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no .env e tire o VITE_LOCAL.
+          </p>
+        )}
         <div className="adm-topbar">
           <span className="q-brand">
             <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
             Painel
           </span>
           <div className="adm-actions">
+            <BotaoCardapio compacto onClick={() => setBuscando(true)}>Cardápio</BotaoCardapio>
             <Link to="/" className="q-back"><ExternalLink size={14} /> Ver fila</Link>
             {LOCAL && (
               <button type="button" className="q-back" onClick={() => localDb.reset()}>Resetar dados</button>
@@ -208,6 +218,17 @@ export default function Dashboard() {
             )}
           </main>
         </div>
+
+        {buscando && (
+          <BuscaMusicas
+            admin
+            onFechar={() => setBuscando(false)}
+            principal={{
+              rotulo: 'Copiar nº',
+              onClick: async (m) => ((await copiarTexto(m.numero)) ? { feito: 'Copiado' } : { feito: 'Não copiou' }),
+            }}
+          />
+        )}
       </div>
     </div>
   )

@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { Play, Check, ChevronUp, ChevronDown, Trash2, MessageSquare, AlertCircle, UserPlus } from 'lucide-react'
+import { Play, Check, ChevronUp, ChevronDown, Trash2, MessageSquare, AlertCircle, UserPlus, Search } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { activeRanked } from '../hooks/useQueue'
+import { useTitulos } from '../hooks/useTitulos'
+import { rotuloMusica } from '../lib/catalogo'
+import BuscaMusicas from '../components/BuscaMusicas'
 import { mapErroAdmin } from './erros'
 
 // fila do painel admin: chamar/concluir, reordenar, apagar e abrir o chat
@@ -14,6 +17,7 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
   const ranked = activeRanked(entries)
   const done = entries.filter((e) => e.status === 'done')
   const temNoPalco = ranked.some((e) => e.status === 'playing')
+  const titulos = useTitulos(ranked.map((e) => e.numero_musica))
   const [erro, setErro] = useState('')
 
   async function setStatus(id, status) {
@@ -74,6 +78,9 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
             <span className="adm-item__rank">{e.rank}</span>
             <div className="adm-item__body">
               <div className="adm-item__title">Nº {e.numero_musica} · {e.nome}</div>
+              {titulos.get(e.numero_musica)?.titulo && (
+                <div className="adm-item__song">{rotuloMusica(titulos.get(e.numero_musica))}</div>
+              )}
               <div className="adm-item__meta">
                 <span className={`adm-chip adm-chip--${e.status}`}>
                   {e.status === 'playing' ? 'no palco' : 'aguardando'}
@@ -134,6 +141,8 @@ function IncluirSemCelular({ onChanged }) {
   const [numero, setNumero] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const escolhida = useTitulos(numero ? [numero] : []).get(numero)
 
   async function incluir(e) {
     e.preventDefault()
@@ -185,7 +194,17 @@ function IncluirSemCelular({ onChanged }) {
           maxLength={5}
           required
         />
+        <button
+          type="button"
+          className="q-iconbtn q-iconbtn--lg"
+          onClick={() => setBuscando(true)}
+          aria-label="Abrir o cardápio de músicas"
+          title="Cardápio de músicas"
+        >
+          <Search size={17} />
+        </button>
       </div>
+      {escolhida?.titulo && <p className="adm-incluir__musica">{rotuloMusica(escolhida)}</p>}
       {erro && (
         <p className="q-error">
           <AlertCircle size={16} /> {erro}
@@ -206,6 +225,20 @@ function IncluirSemCelular({ onChanged }) {
           Fechar
         </button>
       </div>
+
+      {buscando && (
+        <BuscaMusicas
+          admin
+          onFechar={() => setBuscando(false)}
+          principal={{
+            rotulo: 'Usar',
+            onClick: (m) => {
+              setNumero(m.numero)
+              return { fechar: true }
+            },
+          }}
+        />
+      )}
     </form>
   )
 }

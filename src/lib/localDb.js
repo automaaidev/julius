@@ -4,7 +4,8 @@
 // select/update direto), pra que hooks e páginas não precisem saber se
 // estão em modo local ou remoto. Sem login. Dados são 100% fake, pra teste.
 
-import { subscribe, all, one, run, reseed, dbReady, uuid } from './sqlite'
+import { subscribe, all, one, run, runMany, reseed, dbReady, uuid } from './sqlite'
+import { normalizar } from './normalizar'
 import { abertoAgora } from './schedule'
 import { MSG } from './avisos'
 
@@ -27,6 +28,7 @@ function parseSettings(row) {
       encerramento_automatico: true,
       limite_musicas: 1,
       ultimo_encerramento: null,
+      intervalo_repetir_min: 30,
     }
   }
   let horario = DEFAULT_HORARIO
@@ -42,6 +44,7 @@ function parseSettings(row) {
     encerramento_automatico: Number(row.encerramento_automatico) !== 0,
     limite_musicas: Number(row.limite_musicas) || 1,
     ultimo_encerramento: row.ultimo_encerramento || null,
+    intervalo_repetir_min: Number.isFinite(Number(row.intervalo_repetir_min)) ? Number(row.intervalo_repetir_min) : 30,
   }
 }
 
@@ -71,20 +74,22 @@ export const localDb = {
     const next = { ...this.getSettings(), ...patch }
     run(
       `INSERT INTO settings
-         (id, abertura_modo, horario_funcionamento, encerramento_automatico, limite_musicas, ultimo_encerramento)
-         VALUES (1, ?, ?, ?, ?, ?)
+         (id, abertura_modo, horario_funcionamento, encerramento_automatico, limite_musicas, ultimo_encerramento, intervalo_repetir_min)
+         VALUES (1, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          abertura_modo = excluded.abertura_modo,
          horario_funcionamento = excluded.horario_funcionamento,
          encerramento_automatico = excluded.encerramento_automatico,
          limite_musicas = excluded.limite_musicas,
-         ultimo_encerramento = excluded.ultimo_encerramento`,
+         ultimo_encerramento = excluded.ultimo_encerramento,
+         intervalo_repetir_min = excluded.intervalo_repetir_min`,
       [
         next.abertura_modo,
         JSON.stringify(next.horario_funcionamento),
         next.encerramento_automatico ? 1 : 0,
         next.limite_musicas,
         next.ultimo_encerramento,
+        next.intervalo_repetir_min,
       ]
     )
   },
@@ -95,9 +100,10 @@ export const localDb = {
   },
 
   // mesma lógica da função julius._entrar_fila (Postgres): ordem de chegada
-  // (posição = fim da fila), até `limite_musicas` ativas por perfil_id e sem
-  // repetir o mesmo número.
-  _entrarFila({ nome, perfil, numero }) {
+  // (posição = fim da fila), até `limite_musicas` ativas por perfil_id, sem
+  // repetir o mesmo número e respeitando o intervalo pra repetir música
+  // (`ignorarRepeticao`: o operador passa por cima, como no Postgres).
+  _entrarFila({ nome, perfil, numero, ignorarRepeticao = false }) {
     const n = String(nome || '').trim()
     const p = String(perfil || '').trim()
     if (!n) throw new Error('NOME_VAZIO')
@@ -110,6 +116,32 @@ export const localDb = {
     if (minhas.some((e) => e.numero_musica === String(numero).trim())) {
       throw new Error('MUSICA_REPETIDA')
     }
+
+    const intervalo = settings.intervalo_repetir_min
+    if (intervalo > 0 && !ignorarRepeticao) {
+      const num = String(numero).trim()
+      const naFila = list.find((e) => e.numero_musica === num)
+      if (naFila) {
+        const err = new Error('MUSICA_NA_FILA')
+        err.detalhe =
+          naFila.status === 'playing' ? '0' : String(list.filter((e) => e.posicao < naFila.posicao).length + 1)
+        throw err
+      }
+      const janelaMs = intervalo * 60_000
+      const cantadaHa = all(
+        "SELECT cantada_em, created_at FROM queue_entries WHERE numero_musica = ? AND status = 'done'",
+        [num]
+      )
+        .map((e) => new Date(e.cantada_em || e.created_at).getTime())
+        .filter((t) => t > Date.now() - janelaMs)
+        .sort((a, b) => b - a)[0]
+      if (cantadaHa) {
+        const err = new Error('MUSICA_RECENTE')
+        err.detalhe = String(Math.max(1, Math.ceil((cantadaHa + janelaMs - Date.now()) / 60_000)))
+        throw err
+      }
+    }
+
     if (minhas.length >= settings.limite_musicas) {
       throw new Error('LIMITE_MUSICAS')
     }
@@ -213,9 +245,13 @@ export const localDb = {
           ? MSG.casaFechada
           : e.message === 'MUSICA_REPETIDA'
             ? MSG.musicaRepetida
-            : e.message === 'LIMITE_MUSICAS'
-              ? MSG.limiteMusicas(this.getSettings().limite_musicas)
-              : MSG.erroGenerico
+            : e.message === 'MUSICA_NA_FILA'
+              ? MSG.musicaNaFila(e.detalhe)
+              : e.message === 'MUSICA_RECENTE'
+                ? MSG.musicaRecente(e.detalhe)
+                : e.message === 'LIMITE_MUSICAS'
+                  ? MSG.limiteMusicas(this.getSettings().limite_musicas)
+                  : MSG.erroGenerico
       this._addMensagem(p, 'sistema', texto)
     }
   },
@@ -271,7 +307,7 @@ export const localDb = {
     return fechadas
   },
 
-  // ---- sugestões (mais cantadas + títulos cadastrados) ----
+  // ---- sugestões (mais cantadas + destaques) e catálogo ----
   // Espelha julius.musicas_sugeridas.
   musicasSugeridas(limite = 8) {
     const vezes = new Map(
@@ -280,10 +316,23 @@ export const localDb = {
          WHERE status IN ('playing', 'done') GROUP BY numero_musica`
       ).map((r) => [r.numero, Number(r.vezes)])
     )
-    const titulos = new Map(all('SELECT numero, titulo FROM musicas').map((r) => [r.numero, r.titulo]))
-    const numeros = new Set([...vezes.keys(), ...titulos.keys()])
+    const musicas = new Map(
+      all('SELECT numero, titulo, artista, destaque FROM musicas WHERE destaque = 1 OR numero IN (SELECT numero_musica FROM queue_entries)').map(
+        (r) => [r.numero, r]
+      )
+    )
+    const numeros = new Set([...vezes.keys(), ...[...musicas.values()].filter((m) => Number(m.destaque) === 1).map((m) => m.numero)])
     return [...numeros]
-      .map((numero) => ({ numero, titulo: titulos.get(numero) ?? null, vezes: vezes.get(numero) ?? 0 }))
+      .map((numero) => {
+        const m = musicas.get(numero)
+        return {
+          numero,
+          titulo: m?.titulo ?? null,
+          artista: m?.artista ?? null,
+          vezes: vezes.get(numero) ?? 0,
+          destaque: Number(m?.destaque) === 1,
+        }
+      })
       .sort(
         (a, b) =>
           b.vezes - a.vezes ||
@@ -294,20 +343,91 @@ export const localDb = {
       .slice(0, Math.max(1, Math.min(limite, 100)))
   },
 
+  // Espelha julius.buscar_musicas (cardápio paginado + filtro). `termo` já vem
+  // normalizado. É modo de teste: filtra e ordena em JS em vez de montar índices.
+  buscarMusicas(termo, categoria = null, limite = 50, offset = 0, ordem = 'titulo') {
+    const filtra = termo.length >= 2
+    // palavra longa perde o "s" do plural: "evidencias" acha "Evidência" (igual ao Postgres)
+    const palavras = filtra
+      ? termo
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => (w.length >= 5 ? w.replace(/s$/, '') : w))
+      : []
+    const condicoes = []
+    const params = []
+    if (categoria) {
+      condicoes.push('categoria = ?')
+      params.push(categoria)
+    }
+    if (filtra) {
+      condicoes.push(`(numero LIKE ? OR (${palavras.map(() => 'busca LIKE ?').join(' AND ')}))`)
+      params.push(`${termo}%`, ...palavras.map((w) => `%${w}%`))
+    }
+    const rows = all(
+      `SELECT numero, titulo, artista, categoria, busca FROM musicas${condicoes.length ? ` WHERE ${condicoes.join(' AND ')}` : ''}`,
+      params
+    ).map((m) => ({ ...m, chaveTitulo: normalizar(m.titulo), chaveArtista: normalizar(m.artista ?? '') }))
+
+    rows.sort(
+      (a, b) =>
+        (filtra ? Number(b.numero === termo) - Number(a.numero === termo) || Number(b.busca.startsWith(termo)) - Number(a.busca.startsWith(termo)) : 0) ||
+        (ordem === 'artista' ? a.chaveArtista.localeCompare(b.chaveArtista) : 0) ||
+        a.chaveTitulo.localeCompare(b.chaveTitulo) ||
+        a.numero.localeCompare(b.numero)
+    )
+    const pagina = rows.slice(Math.max(0, offset), Math.max(0, offset) + Math.max(1, Math.min(limite, 100)))
+    return {
+      itens: pagina.map(({ numero, titulo, artista, categoria: cat }) => ({ numero, titulo, artista, categoria: cat })),
+      total: rows.length,
+    }
+  },
+
+  getMusicas(numeros) {
+    if (!numeros.length) return []
+    return all(
+      `SELECT numero, titulo, artista FROM musicas WHERE numero IN (${numeros.map(() => '?').join(',')})`,
+      numeros
+    )
+  },
+
+  contarCatalogo() {
+    return Number(one('SELECT COUNT(*) AS n FROM musicas')?.n ?? 0)
+  },
+
+  // itens: [[numero, titulo, artista, categoria]] — insere ou atualiza, sem mexer no destaque
+  importarCatalogo(itens) {
+    runMany(
+      `INSERT INTO musicas (numero, titulo, artista, categoria, busca, created_at) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(numero) DO UPDATE SET titulo = excluded.titulo, artista = excluded.artista,
+         categoria = excluded.categoria, busca = excluded.busca`,
+      itens.map(([numero, titulo, artista, categoria]) => [
+        numero,
+        titulo,
+        artista || null,
+        categoria,
+        normalizar(`${titulo} ${artista ?? ''}`),
+        new Date().toISOString(),
+      ])
+    )
+  },
+
+  // título digitado no painel: entra como sugestão (destaque)
   salvarMusica(numero, titulo) {
     const n = String(numero || '').trim()
     const t = String(titulo || '').trim()
     if (!/^[0-9]{1,5}$/.test(n)) throw new Error('NUMERO_INVALIDO')
-    if (t.length < 1 || t.length > 80) throw new Error('TITULO_INVALIDO')
+    if (t.length < 1 || t.length > 120) throw new Error('TITULO_INVALIDO')
+    const existente = one('SELECT artista FROM musicas WHERE numero = ?', [n])
     run(
-      `INSERT INTO musicas (numero, titulo, created_at) VALUES (?, ?, ?)
-       ON CONFLICT(numero) DO UPDATE SET titulo = excluded.titulo`,
-      [n, t, new Date().toISOString()]
+      `INSERT INTO musicas (numero, titulo, destaque, busca, created_at) VALUES (?, ?, 1, ?, ?)
+       ON CONFLICT(numero) DO UPDATE SET titulo = excluded.titulo, busca = excluded.busca`,
+      [n, t, normalizar(`${t} ${existente?.artista ?? ''}`), new Date().toISOString()]
     )
   },
 
-  removerMusica(numero) {
-    run('DELETE FROM musicas WHERE numero = ?', [numero])
+  definirDestaque(numero, valor) {
+    run('UPDATE musicas SET destaque = ? WHERE numero = ?', [valor ? 1 : 0, numero])
   },
 
   // ---- chat: admin ----
@@ -343,6 +463,9 @@ export const localDb = {
     }
 
     run('UPDATE queue_entries SET status = ? WHERE id = ?', [status, id])
+    if (status === 'done') {
+      run('UPDATE queue_entries SET cantada_em = ? WHERE id = ?', [new Date().toISOString(), id])
+    }
 
     if (status === 'playing') {
       this._addMensagem(entry.perfil_id, 'sistema', MSG.suaVez(entry.numero_musica), entry.id)
@@ -363,7 +486,7 @@ export const localDb = {
     if (n.length < 1 || n.length > 24) throw new Error('NOME_INVALIDO')
     if (!/^[0-9]{1,5}$/.test(num)) throw new Error('NUMERO_INVALIDO')
     this.encerrarFilaVencida()
-    return this._entrarFila({ nome: n, perfil: `manual-${uuid()}`, numero: num })
+    return this._entrarFila({ nome: n, perfil: `manual-${uuid()}`, numero: num, ignorarRepeticao: true })
   },
 
   deleteEntry(id) {

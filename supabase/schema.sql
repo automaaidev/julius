@@ -31,6 +31,9 @@ create table if not exists julius.settings (
   ultimo_encerramento date,
   -- quantas músicas cada pessoa pode ter ao mesmo tempo na fila (waiting/playing)
   limite_musicas int not null default 1 check (limite_musicas between 1 and 3),
+  -- minutos até o mesmo número poder voltar pra fila (0 = desligado): barra
+  -- música que já está na fila/no palco ou foi cantada há pouco
+  intervalo_repetir_min int not null default 30 check (intervalo_repetir_min between 0 and 720),
   updated_at timestamptz not null default now()
 );
 
@@ -52,7 +55,9 @@ create table if not exists julius.queue_entries (
   -- 'cancelled' = saiu da fila sem cantar (pessoa cancelou, ou virou o dia)
   status text not null default 'waiting' check (status in ('waiting','playing','done','cancelled')),
   posicao int not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- quando virou 'done' (carimbado pelo trigger); interno, anon não enxerga
+  cantada_em timestamptz
 );
 
 create index if not exists idx_queue_status on julius.queue_entries (status);
@@ -98,12 +103,42 @@ create index if not exists idx_chat_perfil_created on julius.chat_mensagens (per
 create index if not exists idx_conversas_ultima_msg on julius.conversas (ultima_msg_em);
 
 -- ============================================================
--- musicas — título por número (sugestões pra quem é de primeira viagem).
--- O catálogo mesmo vive no aparelho; aqui só o que o painel cadastrou.
+-- musicas — catálogo do aparelho: número -> título + cantor + categoria.
+-- Carregado pelo painel (aba Músicas -> Catálogo -> Importar, a partir de
+-- scripts/gerar-catalogo.py). Alimenta a busca (buscar_musicas) e o nome que
+-- aparece nas sugestões e na fila. `destaque` = entra nas sugestões mesmo sem
+-- ter sido cantada ainda.
 -- ============================================================
+
+-- minúscula, sem acento, pontuação vira espaço, apóstrofo some ("I'm" -> "im",
+-- como a pessoa digita), espaços colapsados. Imutável, então dá pra usar em coluna
+-- gerada. Espelha normalizar() em src/lib/catalogo.js.
+create or replace function julius._norm(t text)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select btrim(regexp_replace(
+    translate(
+      lower(coalesce(t, '')),
+      'áàâãäåéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÅÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ-_.,;:!?()[]"/&’´`''',
+      'aaaaaaeeeeiiiiooooouuuucnaaaaaaeeeeiiiiooooouuuucn               '
+    ),
+    '\s+', ' ', 'g'
+  ))
+$$;
+
 create table if not exists julius.musicas (
   numero text primary key check (numero ~ '^[0-9]{1,5}$'),
-  titulo text not null check (char_length(btrim(titulo)) between 1 and 80),
+  titulo text not null check (char_length(btrim(titulo)) between 1 and 120),
+  artista text,
+  categoria text,
+  destaque boolean not null default false,
+  busca text generated always as (julius._norm(titulo || ' ' || coalesce(artista, ''))) stored,
+  -- chaves de ordenação do cardápio; collate "C" porque o texto já vem normalizado
+  titulo_norm text collate "C" generated always as (julius._norm(titulo)) stored,
+  artista_norm text collate "C" generated always as (julius._norm(artista)) stored,
   created_at timestamptz not null default now()
 );
 
@@ -111,6 +146,11 @@ create table if not exists julius.musicas (
 -- RLS
 -- ============================================================
 alter table julius.settings enable row level security;
+-- o cardápio lê direto dos índices (ordem + paginação), sem ordenar o catálogo
+create index if not exists idx_musicas_titulo on julius.musicas (titulo_norm, numero);
+create index if not exists idx_musicas_artista on julius.musicas (artista_norm, titulo_norm, numero);
+create index if not exists idx_musicas_categoria on julius.musicas (categoria, titulo_norm, numero);
+
 alter table julius.musicas enable row level security;
 alter table julius.queue_entries enable row level security;
 alter table julius.conversas enable row level security;
@@ -267,9 +307,12 @@ set search_path = julius
 as $$
 declare
   v_limite int;
+  v_intervalo int;
   v_count_pessoa int;
   v_tail_posicao int;
   v_nova_posicao int;
+  v_existente julius.queue_entries;
+  v_min int;
   v_row julius.queue_entries;
 begin
   if coalesce(btrim(p_nome), '') = '' then
@@ -280,15 +323,19 @@ begin
   end if;
 
   -- trava a fila inteira p/ essa transação: evita duas entradas
-  -- concorrentes calculando a mesma posição (ordem de chegada = ordem da fila).
+  -- concorrentes calculando a mesma posição (ordem de chegada = ordem da fila)
+  -- ou as duas pedindo o mesmo número ao mesmo tempo.
   lock table julius.queue_entries in share row exclusive mode;
 
   if not julius.esta_aberto() then
     raise exception 'CASA_FECHADA' using errcode = 'P0001';
   end if;
 
-  select coalesce(limite_musicas, 1) into v_limite from julius.settings where id = 1;
+  select coalesce(limite_musicas, 1), coalesce(intervalo_repetir_min, 0)
+    into v_limite, v_intervalo
+  from julius.settings where id = 1;
   v_limite := coalesce(v_limite, 1);
+  v_intervalo := coalesce(v_intervalo, 0);
 
   if exists (
     select 1 from julius.queue_entries
@@ -297,6 +344,42 @@ begin
       and numero_musica = p_numero_musica
   ) then
     raise exception 'MUSICA_REPETIDA' using errcode = 'P0001';
+  end if;
+
+  -- intervalo pra repetir (o operador, via admin_adicionar_fila, ignora)
+  if v_intervalo > 0 and coalesce(current_setting('julius.ignorar_repeticao', true), '') <> 'on' then
+    select * into v_existente
+    from julius.queue_entries
+    where numero_musica = p_numero_musica and status in ('waiting', 'playing')
+    order by posicao
+    limit 1;
+
+    if v_existente.id is not null then
+      -- detail: posição na fila ('0' = está no palco agora)
+      raise exception 'MUSICA_NA_FILA' using errcode = 'P0001', detail = case
+        when v_existente.status = 'playing' then '0'
+        else (
+          select (count(*) + 1)::text from julius.queue_entries
+          where status in ('waiting', 'playing') and posicao < v_existente.posicao
+        )
+      end;
+    end if;
+
+    -- quanto falta (em min) pra liberar, se foi cantada dentro do intervalo
+    select ceil(extract(epoch from (
+             coalesce(cantada_em, created_at) + make_interval(mins => v_intervalo) - now()
+           )) / 60)::int
+      into v_min
+    from julius.queue_entries
+    where numero_musica = p_numero_musica
+      and status = 'done'
+      and coalesce(cantada_em, created_at) > now() - make_interval(mins => v_intervalo)
+    order by coalesce(cantada_em, created_at) desc
+    limit 1;
+
+    if v_min is not null then
+      raise exception 'MUSICA_RECENTE' using errcode = 'P0001', detail = greatest(v_min, 1)::text;
+    end if;
   end if;
 
   select count(*) into v_count_pessoa
@@ -434,6 +517,7 @@ declare
   v_numero text := btrim(coalesce(p_numero, ''));
   v_ultima timestamptz;
   v_limite int;
+  v_detalhe text;
   v_row julius.queue_entries;
   v_rank int;
   v_resposta julius.chat_mensagens;
@@ -475,6 +559,8 @@ begin
     returning * into v_resposta;
   exception
     when sqlstate 'P0001' then
+      get stacked diagnostics v_detalhe = pg_exception_detail;
+
       insert into julius.chat_mensagens (perfil_id, autor, texto)
       values (
         p_perfil,
@@ -482,6 +568,13 @@ begin
         case sqlerrm
           when 'CASA_FECHADA' then 'A casa está fechada agora — tenta de novo no horário de funcionamento.'
           when 'MUSICA_REPETIDA' then 'Essa música você já pediu — ela já está na fila.'
+          when 'MUSICA_NA_FILA' then
+            case when v_detalhe = '0'
+              then 'Essa música está no palco agora. Escolhe outra.'
+              else 'Essa música já está na fila (posição ' || coalesce(v_detalhe, '?') || '). Escolhe outra ou espera ela tocar.'
+            end
+          when 'MUSICA_RECENTE' then
+            'Essa música acabou de ser cantada. Dá pra pedir de novo em uns ' || coalesce(v_detalhe, '?') || ' min — ou escolhe outra.'
           when 'LIMITE_MUSICAS' then
             case when v_limite = 1
               then 'Você já tem 1 música na fila. Espera ela terminar pra pedir outra.'
@@ -627,6 +720,10 @@ begin
 
   perform julius.encerrar_fila_vencida();
 
+  -- só vale nesta transação; quem decide repetir (dueto, pedido especial) é o
+  -- operador, então ele não esbarra no intervalo
+  perform set_config('julius.ignorar_repeticao', 'on', true);
+
   -- perfil próprio por inclusão: sem celular não tem identidade pra amarrar,
   -- então cada inclusão manual é uma "pessoa" nova (limite por pessoa não vale).
   return julius._entrar_fila(v_nome, 'manual-' || gen_random_uuid()::text, v_numero);
@@ -635,24 +732,126 @@ $$;
 
 revoke execute on function julius.admin_adicionar_fila(text, text) from public, anon;
 
+-- Cardápio + busca. Sem texto: o catálogo inteiro, em ordem alfabética (por música
+-- ou por cantor), paginado com p_limite/p_offset — caminho rápido, direto pelos
+-- índices (sem ordenar nem contar o catálogo todo a cada página). Com texto: número
+-- digitado casa pelo começo; texto casa se TODAS as palavras aparecem em título ou
+-- cantor (em qualquer ordem), e o filtro de texto só vale a partir de 2 caracteres.
+-- Resultado do filtro: número exato, começa com o que foi digitado, depois a ordem
+-- pedida. `total` = quantas músicas casam (sem contar a paginação).
+drop function if exists julius.buscar_musicas(text, text, int);
+drop function if exists julius.buscar_musicas(text, text, int, int, text);
+
+create or replace function julius.buscar_musicas(
+  p_q text default '',
+  p_categoria text default null,
+  p_limite int default 50,
+  p_offset int default 0,
+  p_ordem text default 'titulo'
+)
+returns table (numero text, titulo text, artista text, categoria text, total bigint)
+language plpgsql
+stable
+security definer
+set search_path = julius
+as $$
+#variable_conflict use_column
+declare
+  v_txt text := julius._norm(p_q);
+  v_palavras text[];
+  v_limite int := greatest(1, least(coalesce(p_limite, 50), 100));
+  v_offset int := greatest(0, coalesce(p_offset, 0));
+  v_total bigint;
+begin
+  if char_length(v_txt) < 2 then
+    v_txt := '';
+  end if;
+
+  -- cardápio sem filtro de texto: índice + limit, sem sort
+  if v_txt = '' then
+    -- o total só é contado na primeira página; nas seguintes vem 0 (o cliente já tem)
+    if v_offset = 0 then
+      select count(*) into v_total
+        from julius.musicas m
+       where p_categoria is null or m.categoria = p_categoria;
+    else
+      v_total := 0;
+    end if;
+
+    if p_ordem = 'artista' then
+      return query
+        select m.numero, m.titulo, m.artista, m.categoria, v_total
+          from julius.musicas m
+         where p_categoria is null or m.categoria = p_categoria
+         order by m.artista_norm, m.titulo_norm, m.numero
+         limit v_limite offset v_offset;
+    else
+      return query
+        select m.numero, m.titulo, m.artista, m.categoria, v_total
+          from julius.musicas m
+         where p_categoria is null or m.categoria = p_categoria
+         order by m.titulo_norm, m.numero
+         limit v_limite offset v_offset;
+    end if;
+    return;
+  end if;
+
+  -- palavra longa perde o "s" do plural: "evidencias" acha "Evidência"
+  v_palavras := array(
+    select case when char_length(w) >= 5 then regexp_replace(w, 's$', '') else w end
+      from unnest(string_to_array(v_txt, ' ')) w
+     where w <> ''
+  );
+
+  return query
+    with achadas as (
+      select m.*
+        from julius.musicas m
+       where (p_categoria is null or m.categoria = p_categoria)
+         and (
+           m.numero like v_txt || '%'
+           or not exists (
+             select 1 from unnest(v_palavras) w where m.busca not like '%' || w || '%'
+           )
+         )
+    )
+    select a.numero, a.titulo, a.artista, a.categoria, count(*) over ()
+      from achadas a
+     order by (a.numero = v_txt) desc,
+              (a.busca like v_txt || '%') desc,
+              case when p_ordem = 'artista' then a.artista_norm end,
+              a.titulo_norm,
+              a.numero
+     limit v_limite offset v_offset;
+end;
+$$;
+
+grant execute on function julius.buscar_musicas(text, text, int, int, text) to anon, authenticated;
+
+-- sugestões: mais cantadas (contagem automática) + destaques
 create or replace function julius.musicas_sugeridas(p_limite int default 8)
-returns table (numero text, titulo text, vezes int)
+returns table (numero text, titulo text, artista text, vezes int, destaque boolean)
 language sql
 stable
 security definer
 set search_path = julius
 as $$
-  select coalesce(q.numero, m.numero) as numero,
-         m.titulo,
-         coalesce(q.vezes, 0)::int as vezes
-    from (
-      select numero_musica as numero, count(*) as vezes
-        from julius.queue_entries
-       where status in ('playing', 'done')
-       group by numero_musica
-    ) q
-    full join julius.musicas m on m.numero = q.numero
-   order by coalesce(q.vezes, 0) desc, m.titulo nulls last, coalesce(q.numero, m.numero)
+  with q as (
+    select numero_musica as numero, count(*)::int as vezes
+      from julius.queue_entries
+     where status in ('playing', 'done')
+     group by numero_musica
+  ), base as (
+    select q.numero, q.vezes from q
+    union all
+    select m.numero, 0
+      from julius.musicas m
+     where m.destaque and not exists (select 1 from q where q.numero = m.numero)
+  )
+  select b.numero, m.titulo, m.artista, b.vezes, coalesce(m.destaque, false) as destaque
+    from base b
+    left join julius.musicas m on m.numero = b.numero
+   order by b.vezes desc, m.titulo nulls last, b.numero
    limit greatest(1, least(coalesce(p_limite, 8), 100));
 $$;
 
@@ -698,6 +897,12 @@ declare
 begin
   if new.status = old.status then
     return new;
+  end if;
+
+  -- só a coluna cantada_em muda: o trigger é "after update of status", então
+  -- esse update não dispara ele de novo
+  if new.status = 'done' then
+    update julius.queue_entries set cantada_em = now() where id = new.id;
   end if;
 
   if current_setting('julius.encerrando', true) = 'on' then

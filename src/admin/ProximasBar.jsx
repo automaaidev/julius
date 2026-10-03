@@ -1,37 +1,16 @@
 import { useState } from 'react'
 import { Copy, Check, ListOrdered } from 'lucide-react'
+import { copiarTexto } from '../lib/clipboard'
+import { useTitulos } from '../hooks/useTitulos'
 
 const VAGAS = 4
-
-// copia mesmo em http puro (celular na rede local): navigator.clipboard só
-// existe em contexto seguro, então cai pro textarea + execCommand.
-async function copiarTexto(texto) {
-  try {
-    await navigator.clipboard.writeText(texto)
-    return true
-  } catch {
-    try {
-      const ta = document.createElement('textarea')
-      ta.value = texto
-      ta.setAttribute('readonly', '')
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      const ok = document.execCommand('copy')
-      document.body.removeChild(ta)
-      return ok
-    } catch {
-      return false
-    }
-  }
-}
 
 // "Montar no aparelho": as próximas 4 músicas que esperam, na ordem da fila —
 // o operador lança essa sequência no aparelho de karaokê sem ficar
 // conferindo a lista. Muda sozinha quando a fila anda ou é reordenada.
 export default function ProximasBar({ ranked }) {
   const proximas = ranked.filter((e) => e.status === 'waiting').slice(0, VAGAS)
+  const titulos = useTitulos(proximas.map((e) => e.numero_musica))
   const [copiado, setCopiado] = useState(false)
 
   async function copiar() {
@@ -56,6 +35,7 @@ export default function ProximasBar({ ranked }) {
               <span className="adm-seq__pos">{i + 1}</span>
               <span className="adm-seq__txt">
                 <b>Nº {e.numero_musica}</b>
+                {titulos.get(e.numero_musica)?.titulo && <em>{titulos.get(e.numero_musica).titulo}</em>}
                 <span>{e.nome}</span>
               </span>
             </li>

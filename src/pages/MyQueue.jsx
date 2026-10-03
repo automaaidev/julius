@@ -13,6 +13,7 @@ import {
   Flame,
   Moon,
 } from 'lucide-react'
+import { LOCAL } from '../lib/flags'
 import { useSettings } from '../hooks/useSettings'
 import { abertoAgora, proximaAbertura } from '../lib/schedule'
 import { useQueue, activeRanked } from '../hooks/useQueue'
@@ -21,7 +22,9 @@ import { useSugestoes } from '../hooks/useSugestoes'
 import { useAgora } from '../hooks/useAgora'
 import { useEncerramento } from '../hooks/useEncerramento'
 import { getPerfilId, getPerfilChave, getPerfilNome, setPerfilNome } from '../lib/perfil'
-import { useCantadas, registrarCantada, jaCantei } from '../lib/cantadas'
+import { useTitulos } from '../hooks/useTitulos'
+import { useCantadas, registrarCantada, jaCantei, adicionarMusica } from '../lib/cantadas'
+import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
 import Caderninho from './Caderninho'
 import './queue.css'
 import './chat.css'
@@ -45,6 +48,7 @@ export default function MyQueue() {
   const [aba, setAba] = useState('pedir')
   const [repetida, setRepetida] = useState(null) // número que a pessoa já cantou, esperando confirmação
   const [cancelando, setCancelando] = useState(null) // id da entrada com "tirar da fila?" aberto
+  const [buscando, setBuscando] = useState(false) // folha de busca de música aberta
 
   const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave)
 
@@ -63,6 +67,7 @@ export default function MyQueue() {
 
   const ranked = activeRanked(entries)
   const minhas = ranked.filter((e) => e.perfil_id === perfilId)
+  const titulos = useTitulos(minhas.map((e) => e.numero_musica))
 
   // música minha que foi pro palco e terminou -> vira "já cantei" no caderninho
   useEffect(() => {
@@ -77,11 +82,29 @@ export default function MyQueue() {
   const fechadoConfirmado = !settingsLoading && settings != null && !aberto
   const abreEm = fechadoConfirmado ? proximaAbertura(settings.horario_funcionamento, agora) : null
   const podePedir = !identificando && !fechadoConfirmado && !noLimite
+  const motivoSemPedir = identificando
+    ? 'Coloque seu nome no chat pra poder pedir música.'
+    : fechadoConfirmado
+      ? 'A casa está fechada agora.'
+      : noLimite
+        ? limite === 1
+          ? 'Você já tem 1 música na fila.'
+          : `Você já tem ${limite} músicas na fila.`
+        : null
 
-  // sugestões: tira o que a pessoa já tem na fila e o que já cantou
+  // sugestões: tira o que a pessoa já tem na fila, o que já cantou e — com o
+  // intervalo pra repetir ligado — o que qualquer um já tem na fila (o
+  // servidor barraria de qualquer jeito)
   const minhasNumeros = new Set(minhas.map((e) => e.numero_musica))
+  const naFilaNumeros = new Set(ranked.map((e) => e.numero_musica))
+  const bloqueiaRepetida = (settings?.intervalo_repetir_min ?? 0) > 0
   const dicas = sugestoes
-    .filter((s) => !minhasNumeros.has(s.numero) && !jaCantei(cantadas, s.numero))
+    .filter(
+      (s) =>
+        !minhasNumeros.has(s.numero) &&
+        !jaCantei(cantadas, s.numero) &&
+        !(bloqueiaRepetida && naFilaNumeros.has(s.numero))
+    )
     .slice(0, 6)
 
   function escolherNumero(n) {
@@ -155,7 +178,12 @@ export default function MyQueue() {
 
   return (
     <div className="q-page">
-      <div className="q-shell">
+      <div className="q-shell q-shell--top">
+        {LOCAL && (
+          <p className="q-local" role="status">
+            Modo teste — dados falsos deste navegador, não o banco real.
+          </p>
+        )}
         <div className="q-top">
           <Link to="/minha-fila" className="q-brand">
             <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
@@ -211,6 +239,10 @@ export default function MyQueue() {
           </button>
         </div>
 
+        <div className="q-busca">
+          <BotaoCardapio onClick={() => setBuscando(true)}>Cardápio de músicas — veja o número</BotaoCardapio>
+        </div>
+
         {aba === 'caderninho' && <Caderninho onPedir={escolherNumero} podePedir={podePedir} />}
 
         {aba === 'pedir' && (
@@ -230,7 +262,12 @@ export default function MyQueue() {
                           <Radio size={26} className="q-now__icon" />
                           <span className="q-now__txt">
                             <strong>É a sua vez!</strong>
-                            <span>Nº {minha.numero_musica} — sobe no palco</span>
+                            <span>
+                              {titulos.get(minha.numero_musica)?.titulo
+                                ? `${titulos.get(minha.numero_musica).titulo} (Nº ${minha.numero_musica})`
+                                : `Nº ${minha.numero_musica}`}{' '}
+                              — sobe no palco
+                            </span>
                           </span>
                         </div>
                       ) : (
@@ -240,8 +277,11 @@ export default function MyQueue() {
                             <span>na fila</span>
                           </span>
                           <span className="q-song__body">
-                            <span className="q-song__title">Nº {minha.numero_musica}</span>
+                            <span className="q-song__title">
+                              {titulos.get(minha.numero_musica)?.titulo ?? `Nº ${minha.numero_musica}`}
+                            </span>
                             <span className="q-song__meta">
+                              {titulos.get(minha.numero_musica)?.titulo && `Nº ${minha.numero_musica} · `}
                               {minha.rank === 1 ? 'você é o próximo' : `${minha.rank - 1} na frente`}
                             </span>
                           </span>
@@ -403,6 +443,30 @@ export default function MyQueue() {
               </p>
             )}
           </>
+        )}
+
+        {buscando && (
+          <BuscaMusicas
+            onFechar={() => setBuscando(false)}
+            principal={{
+              rotulo: 'Pedir',
+              desabilitada: !podePedir,
+              dica: motivoSemPedir ?? undefined,
+              onClick: (m) => {
+                escolherNumero(m.numero)
+                return { fechar: true }
+              },
+            }}
+            secundaria={{
+              rotulo: 'Anotar no caderninho',
+              Icone: NotebookPen,
+              onClick: (m) => {
+                const r = adicionarMusica({ numero: m.numero, titulo: m.titulo })
+                return { feito: !r.ok ? 'Cheio' : r.repetida ? 'Já anotada' : 'Anotada' }
+              },
+            }}
+            aviso={motivoSemPedir ? `${motivoSemPedir} Dá pra anotar no caderninho e pedir depois.` : null}
+          />
         )}
       </div>
     </div>

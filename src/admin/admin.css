@@ -15,7 +15,7 @@
   margin-bottom: 1.4rem;
 }
 
-.adm-actions { display: flex; gap: 0.5rem; }
+.adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
 .adm-h2 {
   display: flex;
@@ -429,6 +429,13 @@
   font-size: 0.95rem;
 }
 
+.adm-item__song {
+  margin-top: 0.1rem;
+  font-size: 0.82rem;
+  color: var(--luz-suave);
+  overflow-wrap: anywhere;
+}
+
 .adm-item__meta {
   display: flex;
   align-items: center;
@@ -556,13 +563,17 @@
 .adm-seq__txt { min-width: 0; display: grid; line-height: 1.2; }
 .adm-seq__txt b { font-family: 'Oswald', sans-serif; color: var(--pessego); font-weight: 600; font-size: 1rem; }
 
-.adm-seq__txt span {
+.adm-seq__txt span,
+.adm-seq__txt em {
   font-size: 0.78rem;
   opacity: 0.8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* nome da música (catálogo) */
+.adm-seq__txt em { font-style: normal; opacity: 1; color: var(--luz-suave); }
 
 @media (max-width: 767px) {
   .adm-seq__list { grid-template-columns: repeat(2, 1fr); }
@@ -584,6 +595,7 @@
 .adm-incluir__row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .adm-incluir__row input:first-child { flex: 1; min-width: 140px; }
 .adm-incluir__row input:nth-child(2) { width: 90px; flex: none; }
+.adm-incluir__musica { margin: 0; font-size: 0.85rem; color: var(--luz-suave); }
 
 /* ---- regras da fila (aba Casa) ---- */
 .adm-regra {
@@ -634,7 +646,25 @@
 
 .adm-mus-item__num { min-width: 64px; font-family: 'Oswald', sans-serif; color: var(--pessego); font-weight: 600; }
 
-.adm-mus-item__form { flex: 1; min-width: 160px; display: flex; gap: 0.4rem; align-items: center; }
+.adm-mus-item__form { flex: 1; min-width: 200px; display: flex; gap: 0.4rem; align-items: center; }
 .adm-mus-item__form input { padding: 0.5rem 0.7rem; font-size: 0.9rem; }
 
 .adm-mus-item__vezes { font-size: 0.75rem; color: var(--pessego-escuro); flex-shrink: 0; }
+.adm-mus-item__artista { font-size: 0.78rem; color: var(--pessego-escuro); flex-shrink: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-iconbtn.is-fixada { border-color: var(--luz); color: var(--luz); }
+
+/* ---- catálogo do aparelho (aba Músicas) ---- */
+.adm-cat__total { margin: 0 0 0.8rem; font-family: 'Oswald', sans-serif; font-size: 1.05rem; letter-spacing: 0.04em; color: var(--pessego); }
+.adm-cat__acts { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.adm-cat__barra {
+  position: relative;
+  margin-top: 0.9rem;
+  height: 22px;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.adm-cat__barra span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(135deg, var(--luz-suave), var(--luz)); transition: width 0.2s; }
+.adm-cat__barra small { position: relative; display: block; text-align: center; line-height: 20px; font-size: 0.72rem; font-weight: 600; color: var(--texto-claro); mix-blend-mode: difference; }
+.adm-cat__ok { display: flex; align-items: center; gap: 0.4rem; margin: 0.8rem 0 0; font-size: 0.85rem; color: var(--luz-suave); }

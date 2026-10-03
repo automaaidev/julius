@@ -11,6 +11,7 @@
 
 import initSqlJs from 'sql.js'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import { normalizar } from './normalizar'
 
 const DB_KEY = 'juliu_sqlite_v1'
 
@@ -33,7 +34,8 @@ CREATE TABLE IF NOT EXISTS settings (
   horario_funcionamento TEXT NOT NULL DEFAULT '{}',
   encerramento_automatico INTEGER NOT NULL DEFAULT 1,
   limite_musicas INTEGER NOT NULL DEFAULT 1,
-  ultimo_encerramento TEXT
+  ultimo_encerramento TEXT,
+  intervalo_repetir_min INTEGER NOT NULL DEFAULT 30
 );
 CREATE TABLE IF NOT EXISTS queue_entries (
   id            TEXT PRIMARY KEY,
@@ -42,7 +44,8 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   numero_musica TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'waiting',
   posicao       INTEGER NOT NULL,
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+  cantada_em    TEXT
 );
 CREATE TABLE IF NOT EXISTS conversas (
   perfil_id        TEXT PRIMARY KEY,
@@ -64,6 +67,10 @@ CREATE TABLE IF NOT EXISTS chat_mensagens (
 CREATE TABLE IF NOT EXISTS musicas (
   numero     TEXT PRIMARY KEY,
   titulo     TEXT NOT NULL,
+  artista    TEXT,
+  categoria  TEXT,
+  destaque   INTEGER NOT NULL DEFAULT 0,
+  busca      TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 `
@@ -75,12 +82,26 @@ const COLUNAS_NOVAS = [
   ['settings', 'encerramento_automatico', 'INTEGER NOT NULL DEFAULT 1'],
   ['settings', 'limite_musicas', 'INTEGER NOT NULL DEFAULT 1'],
   ['settings', 'ultimo_encerramento', 'TEXT'],
+  ['settings', 'intervalo_repetir_min', 'INTEGER NOT NULL DEFAULT 30'],
+  ['queue_entries', 'cantada_em', 'TEXT'],
+  ['musicas', 'artista', 'TEXT'],
+  ['musicas', 'categoria', 'TEXT'],
+  ['musicas', 'destaque', 'INTEGER NOT NULL DEFAULT 0'],
+  ['musicas', 'busca', "TEXT NOT NULL DEFAULT ''"],
 ]
 
 function migrar() {
   for (const [tabela, coluna, ddl] of COLUNAS_NOVAS) {
     const tem = all(`PRAGMA table_info(${tabela})`).some((c) => c.name === coluna)
-    if (!tem) db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`)
+    if (tem) continue
+    db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`)
+    // o que já estava cadastrado eram as sugestões do painel (mesma regra do Postgres)
+    if (coluna === 'destaque') db.run('UPDATE musicas SET destaque = 1')
+    if (coluna === 'busca') {
+      for (const m of all('SELECT numero, titulo, artista FROM musicas')) {
+        db.run('UPDATE musicas SET busca = ? WHERE numero = ?', [normalizar(`${m.titulo} ${m.artista ?? ''}`), m.numero])
+      }
+    }
   }
 }
 
@@ -164,13 +185,14 @@ const SEED_CONVERSAS = [
   ['p_carol', 'k_carol', 'Carol'],
 ]
 
-// títulos de exemplo pras sugestões (números inventados, só pra teste local)
+// títulos de exemplo pras sugestões (números inventados, só pra teste local) —
+// entram como destaque. O catálogo de verdade vem do painel (Músicas -> Importar).
 const SEED_MUSICAS = [
-  ['1042', 'Evidências'],
-  ['733', 'Faz Parte do Meu Show'],
-  ['188', 'Anna Júlia'],
-  ['990', 'Trem-Bala'],
-  ['415', 'Último Romance'],
+  ['1042', 'Evidências', 'Chitãozinho e Xororó'],
+  ['733', 'Faz Parte do Meu Show', 'Cazuza'],
+  ['188', 'Anna Júlia', 'Los Hermanos'],
+  ['990', 'Trem-Bala', 'Ana Vilela'],
+  ['415', 'Último Romance', 'Los Hermanos'],
 ]
 
 function seed() {
@@ -178,8 +200,11 @@ function seed() {
     'INSERT INTO settings (id, abertura_modo, horario_funcionamento) VALUES (1, ?, ?)',
     ['aberto', JSON.stringify(HORARIO)]
   )
-  for (const [numero, titulo] of SEED_MUSICAS) {
-    db.run('INSERT INTO musicas (numero, titulo, created_at) VALUES (?, ?, ?)', [numero, titulo, iso(0)])
+  for (const [numero, titulo, artista] of SEED_MUSICAS) {
+    db.run(
+      'INSERT INTO musicas (numero, titulo, artista, categoria, destaque, busca, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
+      [numero, titulo, artista, 'Nacionais', normalizar(`${titulo} ${artista}`), iso(0)]
+    )
   }
   const stmt = db.prepare(
     `INSERT INTO queue_entries
@@ -293,6 +318,24 @@ export function one(sql, params = []) {
 export function run(sql, params = []) {
   if (!db) return
   db.run(sql, params)
+  persist()
+  emit()
+}
+
+// mesma instrução pra várias linhas, numa transação só e UMA persistência no
+// fim (run() em loop regravaria o blob inteiro no localStorage a cada linha).
+export function runMany(sql, listaParams) {
+  if (!db) return
+  db.run('BEGIN')
+  try {
+    const stmt = db.prepare(sql)
+    for (const params of listaParams) stmt.run(params)
+    stmt.free()
+    db.run('COMMIT')
+  } catch (e) {
+    db.run('ROLLBACK')
+    throw e
+  }
   persist()
   emit()
 }

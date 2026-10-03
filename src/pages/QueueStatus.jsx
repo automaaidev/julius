@@ -2,6 +2,8 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Radio, RefreshCw, CheckCircle2, CircleOff } from 'lucide-react'
 import { useQueue, activeRanked } from '../hooks/useQueue'
+import { useTitulos } from '../hooks/useTitulos'
+import { rotuloMusica } from '../lib/catalogo'
 import './queue.css'
 
 export default function QueueStatus() {
@@ -10,6 +12,7 @@ export default function QueueStatus() {
 
   const minha = loading ? null : entries.find((e) => e.id === id)
   const meuRank = minha ? activeRanked(entries).find((e) => e.id === id)?.rank : null
+  const musica = useTitulos(minha ? [minha.numero_musica] : []).get(minha?.numero_musica)
 
   return (
     <div className="q-page">
@@ -36,6 +39,7 @@ export default function QueueStatus() {
           <>
             <div className="q-head">
               <h1>Nº {minha.numero_musica}</h1>
+              {musica?.titulo && <p>{rotuloMusica(musica)}</p>}
               <p>{minha.nome}</p>
             </div>
 

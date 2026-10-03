@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DoorOpen, DoorClosed, CalendarClock, Clock, Save, AlertTriangle, Trash2, Moon, Users, AlertCircle } from 'lucide-react'
+import { DoorOpen, DoorClosed, CalendarClock, Clock, Save, AlertTriangle, Trash2, Moon, Users, AlertCircle, Timer } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
@@ -74,6 +74,9 @@ async function salvarSettings(patch) {
 function RegrasFila({ settings, onChanged }) {
   const encerra = settings.encerramento_automatico === true
   const limite = settings.limite_musicas ?? 1
+  const intervalo = settings.intervalo_repetir_min ?? 0
+  // atalhos comuns; se o banco tiver outro valor (ex: mexido por SQL) ele aparece também
+  const opcoesIntervalo = [...new Set([0, 15, 30, 60, 120, intervalo])].sort((a, b) => a - b)
   const [erro, setErro] = useState('')
 
   async function aplicar(patch) {
@@ -122,6 +125,33 @@ function RegrasFila({ settings, onChanged }) {
         </div>
       </div>
 
+      <div className="adm-regra adm-regra--col">
+        <span className="adm-regra__txt">
+          <b><Timer size={13} /> Intervalo pra repetir música</b>
+          <span>
+            Barra o mesmo número de entrar na fila enquanto ele já está na fila ou no palco, e por esse
+            tempo depois de cantado. O operador pode incluir mesmo assim (ex: dueto).
+          </span>
+        </span>
+        <div className="adm-modos">
+          {opcoesIntervalo.map((n) => (
+            <button
+              key={n}
+              type="button"
+              className={`adm-modo ${intervalo === n ? 'adm-modo--on' : ''}`}
+              onClick={() => intervalo !== n && aplicar({ intervalo_repetir_min: n })}
+            >
+              {rotuloIntervalo(n)}
+            </button>
+          ))}
+        </div>
+        <p className="adm-modo__hint" style={{ marginTop: 0 }}>
+          {intervalo === 0
+            ? 'Desligado: qualquer pessoa pode pedir um número que já está na fila ou acabou de ser cantado.'
+            : `Ligado: um número só volta ${rotuloIntervalo(intervalo, true)} depois de cantado, e nunca entra duas vezes ao mesmo tempo.`}
+        </p>
+      </div>
+
       {erro && (
         <p className="q-error">
           <AlertCircle size={16} /> {erro}
@@ -129,6 +159,14 @@ function RegrasFila({ settings, onChanged }) {
       )}
     </>
   )
+}
+
+// 0 -> "Desligado" | 15 -> "15 min" | 60 -> "1 h" ; `frase` = forma pra usar no meio do texto
+function rotuloIntervalo(min, frase = false) {
+  if (min === 0) return 'Desligado'
+  if (min < 60 || min % 60 !== 0) return frase ? `${min} minutos` : `${min} min`
+  const h = min / 60
+  return frase ? `${h} ${h === 1 ? 'hora' : 'horas'}` : `${h} h`
 }
 
 function ModoControls({ settings, onChanged }) {

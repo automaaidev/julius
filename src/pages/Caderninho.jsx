@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Mic2, Plus, Trash2, Lock } from 'lucide-react'
 import { useCantadas, adicionarMusica, marcarFeita, removerItem } from '../lib/cantadas'
+import { obterMusicas } from '../lib/catalogo'
 
 function quando(iso) {
   if (!iso) return ''
@@ -24,9 +25,12 @@ export default function Caderninho({ onPedir, podePedir }) {
     .filter((i) => i.feita)
     .sort((a, b) => String(b.feitaEm).localeCompare(String(a.feitaEm)))
 
-  function anotar(e) {
+  async function anotar(e) {
     e.preventDefault()
-    const r = adicionarMusica({ numero, titulo })
+    // só o número digitado: o nome vem do catálogo, se a música estiver lá
+    let nome = titulo
+    if (!nome.trim() && numero) nome = (await obterMusicas([numero])).get(numero)?.titulo ?? ''
+    const r = adicionarMusica({ numero, titulo: nome })
     if (!r.ok) {
       setAviso(r.erro || 'Coloca o número da música.')
       return

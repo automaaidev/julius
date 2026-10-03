@@ -31,6 +31,12 @@
   margin: auto;
 }
 
+/* tela com abas: ancora no topo pra logo/nome/abas não pularem de lugar
+   quando o conteúdo de cada aba muda de altura */
+.q-shell--top {
+  margin: 0 auto;
+}
+
 /* topo: marca + voltar */
 .q-top {
   display: flex;
@@ -550,6 +556,9 @@
   font-weight: 600;
 }
 
+/* "Buscar música": fica logo abaixo das abas, no mesmo lugar nas duas */
+.q-busca { margin: -0.2rem 0 0.9rem; }
+
 .q-linkbtn {
   display: block;
   margin: 0.85rem auto 0;
@@ -601,6 +610,7 @@
 
 .q-chip {
   display: inline-flex;
+  max-width: 100%;
   align-items: baseline;
   gap: 0.45rem;
   padding: 0.45rem 0.8rem;
@@ -614,7 +624,7 @@
 }
 
 .q-chip b { font-family: 'Oswald', sans-serif; color: var(--luz-suave); }
-.q-chip span { opacity: 0.8; }
+.q-chip span { opacity: 0.8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-chip:hover { border-color: var(--luz); }
 
 .q-sug__hint { margin: 0.7rem 0 0; font-size: 0.75rem; color: var(--pessego-escuro); }
@@ -694,4 +704,17 @@
   font-size: 0.78rem;
   color: var(--pessego-escuro);
   margin-bottom: 0.5rem;
+}
+
+/* aviso fixo do modo LOCAL: dados falsos, não o banco de verdade */
+.q-local {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.8rem;
+  border: 1px dashed rgba(231, 178, 76, 0.6);
+  border-radius: 10px;
+  background: rgba(231, 178, 76, 0.1);
+  color: var(--luz-suave);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  text-align: center;
 }
