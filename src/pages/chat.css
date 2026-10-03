@@ -1,0 +1,235 @@
+/* Bolhas de chat — compartilhado entre /minha-fila (cliente) e o painel
+   admin. Usa os tokens de queue.css (--luz, --palco, --linha, etc). */
+
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.4rem 0.2rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.chat-bubble {
+  position: relative;
+  max-width: 78%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+a.chat-bubble { text-decoration: none; }
+
+.chat-bubble--cliente {
+  align-self: flex-end;
+  background: var(--luz);
+  color: var(--palco);
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble--admin {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--texto-claro);
+  border: 1px solid var(--linha);
+  border-bottom-left-radius: 4px;
+}
+
+.chat-bubble--sistema {
+  align-self: center;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--pessego-escuro);
+  font-size: 0.8rem;
+  text-align: center;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+}
+
+.chat-bubble__del {
+  display: none;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  background: var(--palco);
+  border: 1px solid var(--linha);
+  color: var(--pessego-escuro);
+  cursor: pointer;
+}
+
+.chat-bubble:hover .chat-bubble__del { display: flex; }
+
+.chat-composer {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.6rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid var(--linha);
+}
+
+.chat-composer input { flex: 1; }
+
+.chat-lock {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--pessego-escuro);
+  padding: 0.6rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid var(--linha);
+}
+
+/* ---- admin: inbox + thread ---- */
+
+.adm-chat {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.8rem;
+}
+
+.adm-chat__danger {
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.3rem;
+  border: 1px solid #7a2d2d;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.adm-chat__inbox {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.adm-chat__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  width: 100%;
+}
+
+.adm-chat__row.is-active { border-color: var(--luz); }
+
+.adm-chat__avatar {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(231, 178, 76, 0.14);
+  color: var(--luz-suave);
+}
+
+.adm-chat__row-body { flex: 1; min-width: 0; display: grid; gap: 0.1rem; }
+
+.adm-chat__row-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--texto-claro);
+}
+
+.adm-chat__time { color: var(--pessego-escuro); font-size: 0.7rem; flex-shrink: 0; }
+
+.adm-chat__preview {
+  font-size: 0.78rem;
+  color: var(--texto-claro);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.adm-chat__badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--luz);
+  color: var(--palco);
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-chat__thread {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  padding: 0.8rem;
+  min-height: 420px;
+}
+
+.adm-chat__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--linha);
+  margin-bottom: 0.4rem;
+  color: var(--texto-claro);
+}
+
+.adm-chat__back {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--luz);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.adm-chat__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem 0 0;
+}
+
+.adm-chat__chip {
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--linha);
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--texto-claro);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.adm-chat__chip:hover { border-color: var(--luz); color: var(--luz); }
+
+@media (min-width: 720px) {
+  .adm-chat { grid-template-columns: 260px 1fr; }
+}
+
+@media (max-width: 719px) {
+  .adm-chat__inbox.is-hidden-mobile,
+  .adm-chat__thread.is-hidden-mobile { display: none; }
+  .adm-chat__back { display: inline-block; }
+}

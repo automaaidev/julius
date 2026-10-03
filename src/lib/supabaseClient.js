@@ -16,3 +16,13 @@ export const supabase =
   !LOCAL && isSupabaseConfigured
     ? createClient(url, anonKey, { db: { schema: 'julius' } })
     : null
+
+// Tópico de canal realtime único por montagem do hook. Sem isso, remontar um
+// componente rápido (troca de rota, StrictMode) reusa o MESMO objeto de canal
+// pelo nome — se o anterior ainda está saindo (`leave` é assíncrono), o novo
+// `.subscribe()` não faz nada e o realtime morre em silêncio; e se 2 hooks
+// montados ao mesmo tempo usam o mesmo nome fixo, o 2º `.on()` lança
+// "cannot add postgres_changes callbacks... after subscribe()" e derruba o app.
+export function realtimeTopic(base) {
+  return `${base}-${Math.random().toString(36).slice(2, 9)}`
+}

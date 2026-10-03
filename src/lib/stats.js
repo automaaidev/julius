@@ -2,7 +2,9 @@
 // entradas da fila (inclui as já concluídas). Períodos são de calendário:
 // hoje = desde 00:00; semana = desde segunda 00:00; mês = dia 1; ano = 1º jan.
 //
-// Obs: se o admin "Remover" uma entrada, ela sai da contagem também.
+// Obs: se o admin "Remover" uma entrada, ela sai da contagem também. Entradas
+// 'cancelled' (pessoa errou o número e cancelou, ou virou o dia sem cantar)
+// também não contam — não foram pedidos de verdade.
 
 export function contarMusicas(entries, now = new Date()) {
   const inicioDia = new Date(now)
@@ -14,9 +16,10 @@ export function contarMusicas(entries, now = new Date()) {
   const inicioMes = new Date(now.getFullYear(), now.getMonth(), 1)
   const inicioAno = new Date(now.getFullYear(), 0, 1)
 
-  const acc = { dia: 0, semana: 0, mes: 0, ano: 0, total: entries.length }
+  const validas = entries.filter((e) => e.status !== 'cancelled')
+  const acc = { dia: 0, semana: 0, mes: 0, ano: 0, total: validas.length }
 
-  for (const e of entries) {
+  for (const e of validas) {
     const t = new Date(e.created_at)
     if (Number.isNaN(t.getTime())) continue
     if (t >= inicioAno) acc.ano++

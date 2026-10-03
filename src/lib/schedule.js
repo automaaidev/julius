@@ -8,6 +8,11 @@
 // horario_funcionamento: { sex: '19:00-01:00', sab: 'fechado', ... }
 // Faixa que vira o dia ("19:00-01:00") mantém a casa aberta na madrugada
 // seguinte.
+//
+// settings.encerramento_automatico (padrão ligado na casa): a fila encerra à
+// meia-noite — a faixa do dia vale só até 24h e a madrugada de ontem não
+// conta. `=== true` de propósito: banco sem a migration (campo ausente) segue
+// o comportamento antigo, igual ao servidor.
 
 const LABEL_DIA = {
   seg: 'segunda',
@@ -60,11 +65,14 @@ function faixaDoDia(horario, jsDay) {
  * A casa está aberta AGORA pelo horário cadastrado?
  * Considera também a faixa de ontem que vira a madrugada de hoje.
  */
-export function abertoPorHorario(horario, now = new Date()) {
+export function abertoPorHorario(horario, now = new Date(), { encerraMeiaNoite = false } = {}) {
   if (!horario) return false
   const minAgora = now.getHours() * 60 + now.getMinutes()
 
   const hoje = faixaDoDia(horario, now.getDay())
+  if (encerraMeiaNoite) {
+    return Boolean(hoje) && minAgora >= hoje.abre && minAgora < Math.min(hoje.fecha, 1440)
+  }
   if (hoje && minAgora >= hoje.abre && minAgora < hoje.fecha) return true
 
   // faixa de ontem que passou da meia-noite (ex: sex 19:00-01:00 -> sáb 01:00)
@@ -83,7 +91,9 @@ export function abertoAgora(settings, now = new Date()) {
   if (!settings) return false
   if (settings.abertura_modo === 'aberto') return true
   if (settings.abertura_modo === 'fechado') return false
-  return abertoPorHorario(settings.horario_funcionamento, now)
+  return abertoPorHorario(settings.horario_funcionamento, now, {
+    encerraMeiaNoite: settings.encerramento_automatico === true,
+  })
 }
 
 /**

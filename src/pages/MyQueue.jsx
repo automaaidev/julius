@@ -1,426 +1,408 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import {
-  Mic2,
-  UserRound,
-  UsersRound,
-  Phone,
   ArrowLeft,
-  Plus,
-  X,
+  Send,
   Radio,
-  ChevronRight,
-  Ticket,
   Lock,
   AlertCircle,
   RefreshCw,
+  Mic2,
+  NotebookPen,
+  Flame,
+  Moon,
 } from 'lucide-react'
-import { supabase } from '../lib/supabaseClient'
-import { LOCAL } from '../lib/flags'
-import { localDb } from '../lib/localDb'
 import { useSettings } from '../hooks/useSettings'
-import { abertoAgora } from '../lib/schedule'
+import { abertoAgora, proximaAbertura } from '../lib/schedule'
 import { useQueue, activeRanked } from '../hooks/useQueue'
-import { getPerfilId, getPerfilNome, setPerfilNome, getPerfilTel, setPerfilTel } from '../lib/perfil'
-import { normalizarTel } from '../lib/telefone'
+import { useChatCliente } from '../hooks/useChat'
+import { useSugestoes } from '../hooks/useSugestoes'
+import { useAgora } from '../hooks/useAgora'
+import { useEncerramento } from '../hooks/useEncerramento'
+import { getPerfilId, getPerfilChave, getPerfilNome, setPerfilNome } from '../lib/perfil'
+import { useCantadas, registrarCantada, jaCantei } from '../lib/cantadas'
+import Caderninho from './Caderninho'
 import './queue.css'
-
-const ERROS = {
-  CASA_FECHADA: 'A casa está fechada no momento.',
-  LIMITE_2_MUSICAS: 'Você já tem 2 músicas na fila. Espere uma terminar.',
-  NOME_VAZIO: 'Coloque um nome.',
-  TELEFONE_INVALIDO: 'Confira o WhatsApp com DDD (ex: 11 91234-5678).',
-  PERFIL_INVALIDO: 'Não foi possível te identificar. Recarregue a página.',
-}
-
-const novaMusica = () => ({ numero: '', comParceiro: false, parceiro: '' })
+import './chat.css'
 
 export default function MyQueue() {
   const { settings, loading: settingsLoading } = useSettings()
-  const { entries, loading } = useQueue()
+  const { entries, loading: queueLoading, refetch: refetchQueue } = useQueue()
+  const { sugestoes } = useSugestoes(10)
+  const { itens: cantadas } = useCantadas()
+  const agora = useAgora()
+  useEncerramento(settings?.encerramento_automatico === true)
 
   const [perfilId] = useState(getPerfilId)
+  const [chave] = useState(getPerfilChave)
   const [nome, setNome] = useState(getPerfilNome())
-  const [tel, setTel] = useState(getPerfilTel())
-  // já se identificou nesse navegador (nome + WhatsApp) -> pula pro resultado
-  const [passo, setPasso] = useState(
-    getPerfilNome() && getPerfilTel() ? 'resultado' : 'identificacao'
-  )
-
-  const [mostrarForm, setMostrarForm] = useState(false)
-  const [musicas, setMusicas] = useState([novaMusica()])
-  const [erro, setErro] = useState('')
+  const [identificando, setIdentificando] = useState(!getPerfilNome())
+  const [campoNome, setCampoNome] = useState('')
+  const [campoNumero, setCampoNumero] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aba, setAba] = useState('pedir')
+  const [repetida, setRepetida] = useState(null) // número que a pessoa já cantou, esperando confirmação
+  const [cancelando, setCancelando] = useState(null) // id da entrada com "tirar da fila?" aberto
+
+  const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave)
+
+  const scrollRef = useRef(null)
+  const numeroRef = useRef(null)
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
+  }, [mensagens.length])
+
+  // já se identificou antes nesse navegador -> resincroniza com o servidor
+  // (idempotente) sem precisar passar pela tela de nome de novo.
+  useEffect(() => {
+    if (getPerfilNome()) iniciar(getPerfilNome())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const ranked = activeRanked(entries)
   const minhas = ranked.filter((e) => e.perfil_id === perfilId)
-  // só bloqueia o pedido quando a casa está confirmadamente fechada.
-  // status desconhecido (settings não carregou) -> deixa tentar; a RPC
-  // join_queue rejeita com CASA_FECHADA se for o caso.
-  const fechadoConfirmado = !settingsLoading && settings != null && !abertoAgora(settings)
-  const podePedir = !fechadoConfirmado
-  const maxAdicionar = Math.max(0, 2 - minhas.length)
 
-  function continuar(e) {
-    e.preventDefault()
-    if (!normalizarTel(tel)) {
-      setErro(ERROS.TELEFONE_INVALIDO)
-      return
+  // música minha que foi pro palco e terminou -> vira "já cantei" no caderninho
+  useEffect(() => {
+    for (const e of entries) {
+      if (e.perfil_id === perfilId && e.status === 'done') registrarCantada(e.id, e.numero_musica)
     }
+  }, [entries, perfilId])
+
+  const limite = settings?.limite_musicas ?? 1
+  const noLimite = minhas.length >= limite
+  const aberto = settings ? abertoAgora(settings, agora) : undefined
+  const fechadoConfirmado = !settingsLoading && settings != null && !aberto
+  const abreEm = fechadoConfirmado ? proximaAbertura(settings.horario_funcionamento, agora) : null
+  const podePedir = !identificando && !fechadoConfirmado && !noLimite
+
+  // sugestões: tira o que a pessoa já tem na fila e o que já cantou
+  const minhasNumeros = new Set(minhas.map((e) => e.numero_musica))
+  const dicas = sugestoes
+    .filter((s) => !minhasNumeros.has(s.numero) && !jaCantei(cantadas, s.numero))
+    .slice(0, 6)
+
+  function escolherNumero(n) {
+    setCampoNumero(n)
+    setRepetida(null)
     setErro('')
-    setPerfilNome(nome.trim())
-    setPerfilTel(tel.trim())
-    setMostrarForm(false)
-    setPasso('resultado')
+    setAba('pedir')
+    setTimeout(() => numeroRef.current?.focus(), 60)
   }
 
-  function trocarNome() {
-    setPasso('identificacao')
-    setMostrarForm(false)
-    setErro('')
-  }
-
-  function abrirForm() {
-    setMusicas([novaMusica()])
-    setErro('')
-    setMostrarForm(true)
-  }
-
-  function patchMusica(i, patch) {
-    setMusicas((atual) => atual.map((m, idx) => (idx === i ? { ...m, ...patch } : m)))
-  }
-
-  function adicionarInputMusica() {
-    if (musicas.length < maxAdicionar) setMusicas([...musicas, novaMusica()])
-  }
-
-  function removerInputMusica(i) {
-    setMusicas(musicas.filter((_, idx) => idx !== i))
-  }
-
-  async function entrarNaFila(e) {
+  async function confirmarNome(e) {
     e.preventDefault()
-    setErro('')
+    const n = campoNome.trim()
+    if (!n) return
     setEnviando(true)
-
-    const pedidos = musicas.filter((m) => m.numero.trim())
-    for (const m of pedidos) {
-      const parceiro = m.comParceiro ? m.parceiro.trim() : ''
-      const nomeMusica = parceiro ? `${nome.trim()} e ${parceiro}` : nome.trim()
-
-      const telNorm = normalizarTel(tel)
-      let error = null
-      if (LOCAL) {
-        try {
-          localDb.joinQueue({ nome: nomeMusica, perfil: perfilId, numero: m.numero.trim(), telefone: telNorm })
-        } catch (e) {
-          error = { message: e.message }
-        }
-      } else {
-        ;({ error } = await supabase.rpc('join_queue', {
-          p_nome: nomeMusica,
-          p_perfil: perfilId,
-          p_numero_musica: m.numero.trim(),
-          p_telefone: telNorm,
-        }))
-      }
-
-      if (error) {
-        console.error('join_queue falhou:', error)
-        setEnviando(false)
-        setErro(
-          ERROS[error.message] ||
-            error.message ||
-            'Não foi possível entrar na fila. Tente de novo.'
-        )
+    setErro('')
+    try {
+      const r = await iniciar(n)
+      if (!r.ok) {
+        setErro(r.erro)
         return
       }
+      setPerfilNome(n)
+      setNome(n)
+      setIdentificando(false)
+      setCampoNome('')
+    } finally {
+      setEnviando(false)
     }
+  }
 
-    setEnviando(false)
-    setMostrarForm(false)
-    setMusicas([novaMusica()])
+  async function enviar(n) {
+    setEnviando(true)
+    setErro('')
+    try {
+      const r = await enviarNumero(n)
+      setCampoNumero('')
+      setRepetida(null)
+      if (!r.ok) setErro(r.erro)
+      refetchQueue()
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  function enviarMsg(e) {
+    e.preventDefault()
+    const n = campoNumero.trim()
+    if (!n) return
+    // já cantou essa (pelo caderninho)? pergunta antes — evita pedir a mesma
+    // música e bagunçar a ordem da fila
+    if (jaCantei(cantadas, n)) {
+      setRepetida(n)
+      return
+    }
+    enviar(n)
+  }
+
+  async function tirarDaFila(id) {
+    setEnviando(true)
+    setErro('')
+    try {
+      const r = await cancelarMusica(id)
+      if (!r.ok) setErro(r.erro)
+      setCancelando(null)
+      refetchQueue()
+    } finally {
+      setEnviando(false)
+    }
   }
 
   return (
     <div className="q-page">
       <div className="q-shell">
         <div className="q-top">
-          <Link to="/" className="q-brand">
+          <Link to="/minha-fila" className="q-brand">
             <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
           </Link>
-          {passo === 'resultado' && (
-            <button type="button" className="q-back" onClick={trocarNome}>
-              <ArrowLeft size={15} /> Trocar dados
+          {!identificando && (
+            <button
+              type="button"
+              className="q-back"
+              onClick={() => {
+                setIdentificando(true)
+                setErro('')
+              }}
+            >
+              <ArrowLeft size={15} /> Trocar nome
             </button>
           )}
         </div>
 
         <div className="q-head">
-          <h1>Minha fila</h1>
-          <p>
-            {passo === 'identificacao'
-              ? 'Nome + WhatsApp e sua fila abre — sem senha, sem cadastro.'
-              : !loading && minhas.length === 0
-                ? `Oi, ${nome}! Vem pra fila e sobe no palco.`
-                : `Fila de ${nome}. Acompanhe sua vez em tempo real.`}
-          </p>
+          <h1>{nome ? `Oi, ${nome}!` : 'Minha fila'}</h1>
+          <p>Manda o número da música aqui no chat — sem senha, sem cadastro.</p>
+          {aberto !== undefined && (
+            <p className="q-status">
+              <span className={`q-status__pill ${aberto ? 'is-on' : 'is-off'}`}>
+                <span className="q-status__dot" /> {aberto ? 'Casa aberta' : 'Casa fechada'}
+              </span>
+              {!aberto && abreEm && <span className="q-status__hint">{abreEm.label}</span>}
+              {aberto && settings?.encerramento_automatico === true && (
+                <span className="q-status__hint"><Moon size={12} /> A fila encerra à meia-noite</span>
+              )}
+            </p>
+          )}
         </div>
 
-        {passo === 'identificacao' && (
-          <motion.form
-            className="q-card q-form"
-            onSubmit={continuar}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+        <div className="q-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={aba === 'pedir'}
+            className={`q-tab ${aba === 'pedir' ? 'is-active' : ''}`}
+            onClick={() => setAba('pedir')}
           >
-            <label className="q-field">
-              <span><UserRound size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />Seu nome</span>
-              <input
-                value={nome}
-                onChange={(e) => setNome(e.target.value.slice(0, 24))}
-                placeholder="Ex: Rafa"
-                minLength={2}
-                maxLength={24}
-                required
-                autoFocus
-              />
-            </label>
-            <label className="q-field">
-              <span><Phone size={13} style={{ verticalAlign: '-2px', marginRight: 4 }} />WhatsApp</span>
-              <input
-                value={tel}
-                onChange={(e) => setTel(e.target.value.replace(/[^\d\s()+-]/g, '').slice(0, 16))}
-                inputMode="tel"
-                placeholder="Ex: 11 91234-5678"
-                required
-              />
-            </label>
-            <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>
-              A casa te chama no WhatsApp quando sua vez tá chegando.
-            </p>
-            {erro && (
-              <p className="q-error">
-                <AlertCircle size={16} /> {erro}
-              </p>
-            )}
-            <button className="q-btn q-btn--primary" type="submit">
-              Continuar <ChevronRight size={18} />
-            </button>
-          </motion.form>
-        )}
+            <Mic2 size={15} /> Pedir música
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={aba === 'caderninho'}
+            className={`q-tab ${aba === 'caderninho' ? 'is-active' : ''}`}
+            onClick={() => setAba('caderninho')}
+          >
+            <NotebookPen size={15} /> Meu caderninho
+          </button>
+        </div>
 
-        {passo === 'resultado' && (
-          <div className="q-stack">
-            {loading && <p className="q-note">Carregando…</p>}
+        {aba === 'caderninho' && <Caderninho onPedir={escolherNumero} podePedir={podePedir} />}
 
-            {!loading && minhas.map((e, i) => {
-              const naFrente = e.rank - 1
-              if (e.status === 'playing') {
-                return (
+        {aba === 'pedir' && (
+          <>
+            {minhas.length > 0 && (
+              <div className="q-stack" style={{ marginBottom: '0.8rem' }}>
+                {minhas.map((minha) => (
                   <motion.div
-                    key={e.id}
-                    className="q-card q-card--now"
-                    initial={{ opacity: 0, y: 14 }}
+                    key={minha.id}
+                    className={`q-card ${minha.status === 'playing' ? 'q-card--now' : ''}`}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.06 }}
                   >
-                    <Link to={`/fila/${e.id}`} className="q-now" style={{ textDecoration: 'none', color: 'inherit' }}>
-                      <Radio size={30} className="q-now__icon" />
-                      <span className="q-now__txt">
-                        <strong>É a sua vez!</strong>
-                        <span>Nº {e.numero_musica} · {e.nome} — sobe no palco</span>
-                      </span>
+                    <Link to={`/fila/${minha.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      {minha.status === 'playing' ? (
+                        <div className="q-now">
+                          <Radio size={26} className="q-now__icon" />
+                          <span className="q-now__txt">
+                            <strong>É a sua vez!</strong>
+                            <span>Nº {minha.numero_musica} — sobe no palco</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="q-song">
+                          <span className="q-song__rank">
+                            <b>{minha.rank}</b>
+                            <span>na fila</span>
+                          </span>
+                          <span className="q-song__body">
+                            <span className="q-song__title">Nº {minha.numero_musica}</span>
+                            <span className="q-song__meta">
+                              {minha.rank === 1 ? 'você é o próximo' : `${minha.rank - 1} na frente`}
+                            </span>
+                          </span>
+                        </div>
+                      )}
                     </Link>
-                  </motion.div>
-                )
-              }
-              return (
-                <motion.div
-                  key={e.id}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.06 }}
-                >
-                  <Link to={`/fila/${e.id}`} className="q-card q-song">
-                    <span className="q-song__rank">
-                      <b>{e.rank}</b>
-                      <span>na fila</span>
-                    </span>
-                    <span className="q-song__body">
-                      <span className="q-song__title">Nº {e.numero_musica}</span>
-                      <span className="q-song__meta">
-                        {e.nome} · {naFrente === 0 ? 'você é o próximo' : `${naFrente} na frente`}
-                      </span>
-                    </span>
-                    <ChevronRight size={20} className="q-song__go" />
-                  </Link>
-                </motion.div>
-              )
-            })}
 
-            {!loading && minhas.length > 0 && !mostrarForm && (
-              <div className="q-count" aria-label={`${minhas.length} de 2 músicas na fila`}>
-                <span className="q-count__dots">
-                  <i className={minhas.length >= 1 ? 'on' : ''} />
-                  <i className={minhas.length >= 2 ? 'on' : ''} />
-                </span>
-                {minhas.length}/2 músicas na fila
+                    {minha.status === 'waiting' &&
+                      (cancelando === minha.id ? (
+                        <div className="q-cancel">
+                          <span>Tirar a Nº {minha.numero_musica} da fila?</span>
+                          <div className="q-cancel__acts">
+                            <button
+                              type="button"
+                              className="q-btn q-btn--danger q-btn--sm"
+                              onClick={() => tirarDaFila(minha.id)}
+                              disabled={enviando}
+                            >
+                              Sim, cancelar
+                            </button>
+                            <button
+                              type="button"
+                              className="q-btn q-btn--ghost q-btn--sm"
+                              onClick={() => setCancelando(null)}
+                              disabled={enviando}
+                            >
+                              Voltar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button type="button" className="q-linkbtn" onClick={() => setCancelando(minha.id)}>
+                          Errou o número? Cancelar e mandar outro
+                        </button>
+                      ))}
+                  </motion.div>
+                ))}
               </div>
             )}
 
-            {!loading && minhas.length === 0 && !mostrarForm && (
-              podePedir ? (
-                <motion.div
-                  className="q-card q-invite"
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <span className="q-invite__badge"><Ticket size={13} /> Seu convite</span>
-                  <h2 className="q-invite__title">Bora cantar, {nome}?</h2>
-                  <p className="q-invite__txt">
-                    Você ainda não está em nenhuma fila. Escolhe o número da música no
-                    catálogo e a gente te chama quando chegar sua vez no palco.
-                  </p>
-                  <button type="button" className="q-btn q-btn--primary" onClick={abrirForm}>
-                    <Mic2 size={17} /> Entrar na fila
-                  </button>
-                </motion.div>
-              ) : (
-                <div className="q-card">
-                  <p className="q-note">
-                    <Lock size={15} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-                    Casa fechada agora. Volte no horário de funcionamento pra pedir música.
-                  </p>
-                </div>
-              )
-            )}
-
-            {!loading && minhas.length > 0 && podePedir && !mostrarForm && (
-              maxAdicionar > 0 ? (
-                <button type="button" className="q-btn q-btn--ghost" onClick={abrirForm}>
-                  <Plus size={17} /> Pedir mais uma música
-                </button>
-              ) : (
-                <p className="q-note q-note--soft">
-                  Você atingiu o limite de 2 músicas. Quando uma terminar, dá pra pedir outra.
-                </p>
-              )
-            )}
-
-            {!loading && minhas.length > 0 && fechadoConfirmado && !mostrarForm && (
-              <p className="q-note q-note--soft">
-                <Lock size={13} style={{ verticalAlign: '-2px', marginRight: 5 }} />
-                Casa fechada — não dá pra pedir música agora.
-              </p>
-            )}
-
-            {mostrarForm && (
-              <motion.form
-                className="q-card q-form"
-                onSubmit={entrarNaFila}
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>
-                  Pedindo como <strong>{nome}</strong>.
-                </p>
-
-                {musicas.map((m, i) => (
-                  <div key={i} className={`q-songblock ${musicas.length > 1 ? 'is-multi' : ''}`}>
-                    {musicas.length > 1 && (
-                      <div className="q-songblock__head">
-                        <span>Música {i + 1}</span>
-                        {i > 0 && (
-                          <button
-                            type="button"
-                            className="q-iconbtn"
-                            onClick={() => removerInputMusica(i)}
-                            aria-label="Remover música"
-                          >
-                            <X size={15} />
-                          </button>
-                        )}
+            <div className="q-card" style={{ display: 'flex', flexDirection: 'column', minHeight: 380 }}>
+              <div className="chat-thread" ref={scrollRef}>
+                {(chatLoading || queueLoading) && <p className="q-note">Carregando…</p>}
+                {!chatLoading &&
+                  mensagens.map((m) =>
+                    m.queue_entry_id ? (
+                      <Link key={m.id} to={`/fila/${m.queue_entry_id}`} className={`chat-bubble chat-bubble--${m.autor}`}>
+                        {m.texto}
+                      </Link>
+                    ) : (
+                      <div key={m.id} className={`chat-bubble chat-bubble--${m.autor}`}>
+                        {m.texto}
                       </div>
-                    )}
+                    )
+                  )}
+              </div>
 
-                    <label className="q-field">
-                      <span>Número da música</span>
-                      <input
-                        value={m.numero}
-                        onChange={(e) => patchMusica(i, { numero: e.target.value.replace(/\D/g, '').slice(0, 5) })}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        placeholder="ex: 1234"
-                        required
-                        minLength={1}
-                        maxLength={5}
-                        autoFocus={i === 0}
-                      />
-                    </label>
+              {erro && (
+                <p className="q-error">
+                  <AlertCircle size={16} /> {erro}
+                </p>
+              )}
 
-                    <label className="q-check">
-                      <input
-                        type="checkbox"
-                        checked={m.comParceiro}
-                        onChange={(e) => patchMusica(i, { comParceiro: e.target.checked })}
-                      />
-                      <UsersRound size={16} /> Cantar essa com alguém
-                    </label>
-
-                    <AnimatePresence initial={false}>
-                      {m.comParceiro && (
-                        <motion.div
-                          className="q-reveal"
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                        >
-                          <label className="q-field">
-                            <span>Nome da outra pessoa</span>
-                            <input
-                              value={m.parceiro}
-                              onChange={(e) => patchMusica(i, { parceiro: e.target.value.slice(0, 24) })}
-                              placeholder="Ex: Bia"
-                              minLength={2}
-                              maxLength={24}
-                              required={m.comParceiro}
-                            />
-                          </label>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+              {repetida && (
+                <div className="q-warn" role="alert">
+                  <span>
+                    Você já cantou a <b>Nº {repetida}</b> (tá marcada no seu caderninho). Quer pedir de novo mesmo assim?
+                  </span>
+                  <div className="q-cancel__acts">
+                    <button
+                      type="button"
+                      className="q-btn q-btn--primary q-btn--sm"
+                      onClick={() => enviar(repetida)}
+                      disabled={enviando}
+                    >
+                      Pedir mesmo assim
+                    </button>
+                    <button
+                      type="button"
+                      className="q-btn q-btn--ghost q-btn--sm"
+                      onClick={() => {
+                        setRepetida(null)
+                        setCampoNumero('')
+                      }}
+                      disabled={enviando}
+                    >
+                      Escolher outra
+                    </button>
                   </div>
-                ))}
+                </div>
+              )}
 
-                {musicas.length < maxAdicionar && (
-                  <button type="button" className="q-btn q-btn--ghost q-btn--sm" onClick={adicionarInputMusica}>
-                    <Plus size={15} /> Mandar outra junto
+              {identificando ? (
+                <form className="chat-composer" onSubmit={confirmarNome}>
+                  <input
+                    value={campoNome}
+                    onChange={(e) => setCampoNome(e.target.value.slice(0, 24))}
+                    placeholder="Qual seu nome (ou da dupla)?"
+                    minLength={1}
+                    maxLength={24}
+                    autoFocus
+                    required
+                  />
+                  <button className="q-iconbtn" type="submit" disabled={enviando} aria-label="Enviar">
+                    <Send size={16} />
                   </button>
-                )}
+                </form>
+              ) : fechadoConfirmado ? (
+                <p className="chat-lock">
+                  <Lock size={13} /> Casa fechada agora. Volte no horário de funcionamento pra pedir música.
+                </p>
+              ) : noLimite ? (
+                <p className="chat-lock">
+                  {limite === 1
+                    ? 'Você já tem 1 música na fila. Quando terminar, dá pra pedir outra aqui.'
+                    : `Você já tem ${limite} músicas na fila. Quando uma terminar, dá pra pedir outra aqui.`}
+                </p>
+              ) : (
+                <form className="chat-composer" onSubmit={enviarMsg}>
+                  <input
+                    ref={numeroRef}
+                    value={campoNumero}
+                    onChange={(e) => {
+                      setCampoNumero(e.target.value.replace(/\D/g, '').slice(0, 5))
+                      setRepetida(null)
+                    }}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder="Número da música"
+                    maxLength={5}
+                    required
+                  />
+                  <button className="q-iconbtn" type="submit" disabled={enviando} aria-label="Enviar">
+                    <Send size={16} />
+                  </button>
+                </form>
+              )}
+            </div>
 
-                {erro && (
-                  <p className="q-error">
-                    <AlertCircle size={16} /> {erro}
-                  </p>
-                )}
-
-                <button className="q-btn q-btn--primary" type="submit" disabled={enviando}>
-                  <Mic2 size={17} /> {enviando ? 'Entrando…' : 'Entrar na fila'}
-                </button>
-              </motion.form>
+            {podePedir && dicas.length > 0 && (
+              <div className="q-card q-sug">
+                <h3 className="q-sug__h"><Flame size={14} /> Sem ideia do que cantar? As mais pedidas</h3>
+                <div className="q-sug__list">
+                  {dicas.map((s) => (
+                    <button key={s.numero} type="button" className="q-chip" onClick={() => escolherNumero(s.numero)}>
+                      <b>{s.numero}</b>
+                      <span>{s.titulo || (s.vezes > 0 ? `cantada ${s.vezes}×` : '')}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="q-sug__hint">Toca numa pra preencher o número e é só enviar.</p>
+              </div>
             )}
 
-            {!loading && minhas.length > 0 && (
+            {!queueLoading && (
               <p className="q-hint">
                 <RefreshCw size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
                 Atualiza sozinho enquanto a fila anda.
               </p>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

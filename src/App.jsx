@@ -1,6 +1,5 @@
-import { HashRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Analytics } from '@vercel/analytics/react'
-import Home from './pages/Home'
 import QueueStatus from './pages/QueueStatus'
 import MyQueue from './pages/MyQueue'
 import Login from './admin/Login'
@@ -12,7 +11,8 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<Home />} />
+        {/* sem site institucional: a casa só usa o sistema de fila */}
+        <Route path="/" element={<Navigate to="/minha-fila" replace />} />
         <Route path="/fila/:id" element={<QueueStatus />} />
         <Route path="/minha-fila" element={<MyQueue />} />
         <Route path="/app/admin/login" element={<Login />} />

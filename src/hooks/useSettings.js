@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabaseClient'
+import { useCallback, useEffect, useState } from 'react'
+import { supabase, realtimeTopic } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 
@@ -20,6 +20,17 @@ export function useSettings() {
     return supabase ? null : MOCK_SETTINGS
   })
   const [loading, setLoading] = useState(LOCAL || Boolean(supabase))
+  const [topic] = useState(() => realtimeTopic('settings'))
+
+  const refetch = useCallback(async () => {
+    if (LOCAL) {
+      setSettings(localDb.getSettings())
+      return
+    }
+    if (!supabase) return
+    const { data } = await supabase.from('settings').select('*').eq('id', 1).single()
+    setSettings(data)
+  }, [])
 
   useEffect(() => {
     if (LOCAL) {
@@ -41,15 +52,20 @@ export function useSettings() {
       .select('*')
       .eq('id', 1)
       .single()
-      .then(({ data }) => {
-        if (active) {
-          setSettings(data)
-          setLoading(false)
+      .then(
+        ({ data }) => {
+          if (active) {
+            setSettings(data)
+            setLoading(false)
+          }
+        },
+        () => {
+          if (active) setLoading(false)
         }
-      })
+      )
 
     const channel = supabase
-      .channel('settings-realtime')
+      .channel(topic)
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'julius', table: 'settings', filter: 'id=eq.1' },
@@ -61,7 +77,7 @@ export function useSettings() {
       active = false
       supabase.removeChannel(channel)
     }
-  }, [])
+  }, [topic])
 
-  return { settings, loading }
+  return { settings, loading, refetch }
 }

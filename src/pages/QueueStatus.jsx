@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Radio, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Radio, RefreshCw, CheckCircle2, CircleOff } from 'lucide-react'
 import { useQueue, activeRanked } from '../hooks/useQueue'
 import './queue.css'
 
@@ -51,6 +51,14 @@ export default function QueueStatus() {
                   <span className="q-now__txt">
                     <strong>Música concluída</strong>
                     <span>Valeu por cantar com a gente.</span>
+                  </span>
+                </div>
+              ) : minha.status === 'cancelled' ? (
+                <div className="q-now">
+                  <CircleOff size={30} style={{ color: 'var(--pessego-escuro)', flexShrink: 0 }} />
+                  <span className="q-now__txt">
+                    <strong>Saiu da fila</strong>
+                    <span>Esse pedido foi cancelado. Manda outro número quando quiser.</span>
                   </span>
                 </div>
               ) : minha.status === 'playing' ? (

@@ -29,10 +29,11 @@ export function useAuth() {
   return {
     session,
     loading: session === undefined,
-    signIn: (email, password) =>
-      LOCAL
-        ? Promise.resolve({ data: { session: localDb.auth.signIn(email) }, error: null })
-        : supabase?.auth.signInWithPassword({ email, password }),
+    signIn: (email, password) => {
+      if (LOCAL) return Promise.resolve({ data: { session: localDb.auth.signIn(email) }, error: null })
+      if (!supabase) return Promise.resolve({ data: null, error: { message: 'Supabase não configurado.' } })
+      return supabase.auth.signInWithPassword({ email, password })
+    },
     signOut: () => (LOCAL ? localDb.auth.signOut() : supabase?.auth.signOut()),
   }
 }

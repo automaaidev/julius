@@ -1,20 +1,27 @@
-// Mensagens que o painel manda pro cliente no WhatsApp.
-// Tom da casa Juliu's — ajuste o texto à vontade, não quebra nada.
+// Textos das mensagens automáticas do chat (sistema). Têm que ser os MESMOS
+// textos gravados pela função julius.chat_pedir_musica / triggers (Postgres)
+// — aqui é só o espelho pro modo local (SQLite no navegador). Ajuste o tom
+// à vontade, só mantenha os dois lados iguais se mudar.
 
-// 'proximo' -> tá em 2º, prepara / 'vez' -> sobe no palco agora
-export function mensagemAviso(tipo, entry) {
-  const nome = entry?.nome || 'Você'
-  const num = entry?.numero_musica || ''
-
-  if (tipo === 'vez') {
-    return `🎤 Juliu's\n\n${nome}, é a SUA VEZ! Sobe no palco e canta a música Nº ${num}. Bora! 🎶`
-  }
-  // proximo
-  return `🎤 Juliu's\n\n${nome}, se prepara: você é o PRÓXIMO da fila (música Nº ${num}). Fica pertinho do palco! 👀`
+export const MSG = {
+  boasVindas: (nome) => `Oi, ${nome}! Manda o número da música que você quer cantar 🎤`,
+  entrouNaFila: (numero, posicao) => `Nº ${numero} na fila — posição ${posicao}`,
+  casaFechada: 'A casa está fechada agora — tenta de novo no horário de funcionamento.',
+  limiteMusicas: (limite) =>
+    limite === 1
+      ? 'Você já tem 1 música na fila. Espera ela terminar pra pedir outra.'
+      : `Você já tem ${limite} músicas na fila. Espera uma terminar pra pedir outra.`,
+  musicaRepetida: 'Essa música você já pediu — ela já está na fila.',
+  canceladaPelaPessoa: (numero) => `Nº ${numero} saiu da fila. Manda o número certo quando quiser 🎶`,
+  encerramento: 'Valeu por cantar com a gente! A fila encerrou à meia-noite. Até a próxima 🎤',
+  erroGenerico: 'Não deu pra entrar na fila agora. Tenta de novo.',
+  suaVez: (numero) => `É a sua vez! Nº ${numero} — sobe no palco 🎤`,
+  proximo: (numero) => `Se prepara: você é o próximo, Nº ${numero} 👀`,
+  concluido: 'Valeu por cantar! Quando quiser, manda o número da próxima 🎶',
 }
 
-// tipo de aviso conforme a posição/estado da entrada
-export function tipoAviso(entry) {
-  if (entry?.status === 'playing' || entry?.rank === 1) return 'vez'
-  return 'proximo'
-}
+// TODO(dono da casa): escreva de 5 a 8 respostas rápidas pro admin usar no
+// chat, no tom do Juliu's — ex: pedir pra repetir o número, avisar demora,
+// avisar que a música não tá no catálogo, etc. Cada string vira um botão
+// que manda a mensagem pronta na conversa (ver ChatPanel.jsx).
+export const RESPOSTAS_RAPIDAS = []

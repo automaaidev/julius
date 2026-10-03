@@ -14,23 +14,75 @@ import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
 const DB_KEY = 'juliu_sqlite_v1'
 
+// crypto.randomUUID só existe em contexto seguro (https ou localhost) — testar
+// pelo IP do celular na rede local (http puro) derruba o modo LOCAL inteiro
+// sem isso.
+export function uuid() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+// SCHEMA usa IF NOT EXISTS e roda também em cima de um banco salvo (ver
+// dbReady) — assim um blob salvo antes do chat existir ganha as tabelas
+// novas sem precisar resetar os dados.
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   abertura_modo TEXT NOT NULL DEFAULT 'auto',
-  horario_funcionamento TEXT NOT NULL DEFAULT '{}'
+  horario_funcionamento TEXT NOT NULL DEFAULT '{}',
+  encerramento_automatico INTEGER NOT NULL DEFAULT 1,
+  limite_musicas INTEGER NOT NULL DEFAULT 1,
+  ultimo_encerramento TEXT
 );
 CREATE TABLE IF NOT EXISTS queue_entries (
   id            TEXT PRIMARY KEY,
   nome          TEXT NOT NULL,
   perfil_id     TEXT NOT NULL,
-  telefone      TEXT,
   numero_musica TEXT NOT NULL,
   status        TEXT NOT NULL DEFAULT 'waiting',
   posicao       INTEGER NOT NULL,
   created_at    TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS conversas (
+  perfil_id        TEXT PRIMARY KEY,
+  chave            TEXT NOT NULL,
+  nome             TEXT NOT NULL,
+  ultima_msg_em    TEXT,
+  ultima_msg_texto TEXT,
+  nao_lidas_admin  INTEGER NOT NULL DEFAULT 0,
+  created_at       TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS chat_mensagens (
+  id             TEXT PRIMARY KEY,
+  perfil_id      TEXT NOT NULL,
+  autor          TEXT NOT NULL,
+  texto          TEXT NOT NULL,
+  queue_entry_id TEXT,
+  created_at     TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS musicas (
+  numero     TEXT PRIMARY KEY,
+  titulo     TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `
+
+// colunas que entraram depois: CREATE TABLE IF NOT EXISTS não mexe numa tabela
+// que já existe no blob salvo, então adiciona uma a uma (PRAGMA table_info diz
+// o que já tem).
+const COLUNAS_NOVAS = [
+  ['settings', 'encerramento_automatico', 'INTEGER NOT NULL DEFAULT 1'],
+  ['settings', 'limite_musicas', 'INTEGER NOT NULL DEFAULT 1'],
+  ['settings', 'ultimo_encerramento', 'TEXT'],
+]
+
+function migrar() {
+  for (const [tabela, coluna, ddl] of COLUNAS_NOVAS) {
+    const tem = all(`PRAGMA table_info(${tabela})`).some((c) => c.name === coluna)
+    if (!tem) db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`)
+  }
+}
 
 let SQL = null
 let db = null
@@ -89,15 +141,36 @@ const HORARIO = {
 // timestamps relativos a agora, pra alimentar o painel de estatísticas
 const iso = (minAtras) => new Date(Date.now() - minAtras * 60_000).toISOString()
 
+// minutosAtras (não iso() já resolvido) — precisa calcular na hora do
+// seed/reset, não uma vez só quando o módulo carrega. Congelado, um reset
+// horas depois da aba aberta reinsere sempre os MESMOS timestamps antigos
+// e o placar (Hoje/Semana/Mês/Ano) não bate com o reset.
 const SEED_QUEUE = [
-  ['p_rafa', 'Rafa', '11987650001', '1042', 'playing', 1, iso(8)],
-  ['p_bia', 'Bia e Dan', '11987650002', '733', 'waiting', 2, iso(6)],
-  ['p_rafa', 'Rafa', '11987650001', '2210', 'waiting', 4, iso(5)],
-  ['p_leo', 'Léo', '11987650003', '188', 'waiting', 5, iso(3)],
-  ['p_carol', 'Carol', '11987650004', '990', 'waiting', 6, iso(1)],
-  ['p_bia', 'Bia', '11987650002', '415', 'done', 0, iso(35)],
-  ['p_marina', 'Marina', '11987650005', '1200', 'done', 0, iso(70)],
-  ['p_tati', 'Tati e Ju', '11987650006', '640', 'done', 0, iso(1500)], // ~ontem
+  ['p_rafa', 'Rafa', '1042', 'playing', 1, 8],
+  ['p_bia', 'Bia e Dan', '733', 'waiting', 2, 6],
+  ['p_leo', 'Léo', '188', 'waiting', 3, 3],
+  ['p_carol', 'Carol', '990', 'waiting', 4, 1],
+  ['p_bia2', 'Bia', '415', 'done', 0, 35],
+  ['p_marina', 'Marina', '1200', 'done', 0, 70],
+  ['p_tati', 'Tati e Ju', '640', 'done', 0, 1500], // ~ontem
+]
+
+// conversas de exemplo — perfil_id bate com o SEED_QUEUE acima, pra abrir
+// o painel já com fila + chat coerentes entre si.
+const SEED_CONVERSAS = [
+  ['p_rafa', 'k_rafa', 'Rafa'],
+  ['p_bia', 'k_bia', 'Bia e Dan'],
+  ['p_leo', 'k_leo', 'Léo'],
+  ['p_carol', 'k_carol', 'Carol'],
+]
+
+// títulos de exemplo pras sugestões (números inventados, só pra teste local)
+const SEED_MUSICAS = [
+  ['1042', 'Evidências'],
+  ['733', 'Faz Parte do Meu Show'],
+  ['188', 'Anna Júlia'],
+  ['990', 'Trem-Bala'],
+  ['415', 'Último Romance'],
 ]
 
 function seed() {
@@ -105,40 +178,87 @@ function seed() {
     'INSERT INTO settings (id, abertura_modo, horario_funcionamento) VALUES (1, ?, ?)',
     ['aberto', JSON.stringify(HORARIO)]
   )
+  for (const [numero, titulo] of SEED_MUSICAS) {
+    db.run('INSERT INTO musicas (numero, titulo, created_at) VALUES (?, ?, ?)', [numero, titulo, iso(0)])
+  }
   const stmt = db.prepare(
     `INSERT INTO queue_entries
-       (id, nome, perfil_id, telefone, numero_musica, status, posicao, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, nome, perfil_id, numero_musica, status, posicao, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
   for (const row of SEED_QUEUE) {
-    stmt.run([crypto.randomUUID(), row[1], row[0], row[2], row[3], row[4], row[5], row[6]])
+    stmt.run([uuid(), row[1], row[0], row[2], row[3], row[4], iso(row[5])])
   }
   stmt.free()
+
+  seedChat()
+}
+
+function seedChat() {
+  const stmtConv = db.prepare(
+    `INSERT INTO conversas (perfil_id, chave, nome, ultima_msg_em, ultima_msg_texto, nao_lidas_admin, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+  const stmtMsg = db.prepare(
+    `INSERT INTO chat_mensagens (id, perfil_id, autor, texto, queue_entry_id, created_at)
+     VALUES (?, ?, ?, ?, NULL, ?)`
+  )
+
+  for (const [i, [perfil, chave, nome]] of SEED_CONVERSAS.entries()) {
+    const minAtras = 10 - i * 2
+    const criadoEm = iso(minAtras + 5)
+    const entrada = SEED_QUEUE.find((r) => r[0] === perfil)
+    const naoLidas = i === 0 ? 0 : 1
+    const ultimaTexto = entrada ? `Nº ${entrada[2]} na fila` : ''
+
+    stmtConv.run([perfil, chave, nome, iso(minAtras), ultimaTexto, naoLidas, criadoEm])
+
+    stmtMsg.run([uuid(), perfil, 'sistema', `Oi, ${nome}! Manda o número da música que você quer cantar 🎤`, iso(minAtras + 4)])
+    if (entrada) {
+      stmtMsg.run([uuid(), perfil, 'cliente', entrada[2], iso(minAtras + 2)])
+      stmtMsg.run([uuid(), perfil, 'sistema', ultimaTexto, iso(minAtras)])
+    }
+  }
+
+  stmtConv.free()
+  stmtMsg.free()
 }
 
 // ---- init ----
 
 export const dbReady = (async () => {
-  SQL = await initSqlJs({ locateFile: () => wasmUrl })
-
-  let saved = null
   try {
-    saved = localStorage.getItem(DB_KEY)
-  } catch {
-    /* ignore */
-  }
+    SQL = await initSqlJs({ locateFile: () => wasmUrl })
 
-  if (saved) {
-    db = new SQL.Database(fromBase64(saved))
-  } else {
-    db = new SQL.Database()
-    db.run(SCHEMA)
-    seed()
-    persist()
-  }
+    let saved = null
+    try {
+      saved = localStorage.getItem(DB_KEY)
+    } catch {
+      /* ignore */
+    }
 
-  emit()
-  return true
+    if (saved) {
+      db = new SQL.Database(fromBase64(saved))
+      db.run(SCHEMA) // idempotente: só cria o que ainda não existe nesse blob
+      migrar()
+      persist()
+    } else {
+      db = new SQL.Database()
+      db.run(SCHEMA)
+      seed()
+      persist()
+    }
+
+    emit()
+    return true
+  } catch (e) {
+    // WASM não carregou (offline, CSP, blob salvo corrompido, etc) — resolve
+    // mesmo assim (não rejeita) pra quem faz `.then()` sair do "Carregando…";
+    // `db` fica null e all/one/run já tratam isso retornando vazio/no-op.
+    console.error('Modo local: banco não iniciou.', e)
+    emit()
+    return false
+  }
 })()
 
 if (typeof window !== 'undefined') {
@@ -177,10 +297,12 @@ export function run(sql, params = []) {
   emit()
 }
 
-// resema o banco do zero (botão "reset" do painel)
+// reseta o banco do zero (botão "reset" do painel)
 export function reseed() {
   if (!db) return
-  db.run('DROP TABLE IF EXISTS queue_entries; DROP TABLE IF EXISTS settings;')
+  db.run(
+    'DROP TABLE IF EXISTS queue_entries; DROP TABLE IF EXISTS settings; DROP TABLE IF EXISTS conversas; DROP TABLE IF EXISTS chat_mensagens; DROP TABLE IF EXISTS musicas;'
+  )
   db.run(SCHEMA)
   seed()
   persist()

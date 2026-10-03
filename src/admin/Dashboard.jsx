@@ -1,70 +1,105 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  ExternalLink,
-  LogOut,
-  DoorOpen,
-  DoorClosed,
-  Clock,
-  Save,
-  ListMusic,
-  Play,
-  Check,
-  ChevronUp,
-  ChevronDown,
-  Trash2,
-  BarChart3,
-  CalendarClock,
-  MessageCircle,
-} from 'lucide-react'
+import { ExternalLink, LogOut, Mic2, Check, ListMusic, MessageSquare, Settings2, Music2 } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { contarMusicas } from '../lib/stats'
-import { linkWhatsApp, formatTelBR } from '../lib/telefone'
-import { mensagemAviso, tipoAviso } from '../lib/avisos'
 import { abertoAgora } from '../lib/schedule'
 import { useAuth } from '../hooks/useAuth'
 import { useSettings } from '../hooks/useSettings'
 import { useQueue, activeRanked } from '../hooks/useQueue'
+import { useConversas } from '../hooks/useChat'
+import { useEncerramento } from '../hooks/useEncerramento'
+import { useAgora } from '../hooks/useAgora'
+import FilaPanel from './FilaPanel'
+import ChatPanel from './ChatPanel'
+import CasaPanel from './CasaPanel'
+import MusicasPanel from './MusicasPanel'
+import ProximasBar from './ProximasBar'
 import '../pages/queue.css'
+import '../pages/chat.css'
 import './admin.css'
 
-const DIAS = [
-  ['seg', 'segunda'], ['ter', 'terça'], ['qua', 'quarta'], ['qui', 'quinta'],
-  ['sex', 'sexta'], ['sab', 'sábado'], ['dom', 'domingo'],
+const ABAS = [
+  ['fila', 'Fila', ListMusic],
+  ['chat', 'Chat', MessageSquare],
+  ['musicas', 'Músicas', Music2],
+  ['casa', 'Casa', Settings2],
 ]
-
-const MODOS = [
-  ['auto', 'Automático', CalendarClock],
-  ['aberto', 'Forçar aberto', DoorOpen],
-  ['fechado', 'Forçar fechado', DoorClosed],
-]
-
-// seção recolhível — cabeçalho sempre visível, corpo abre/fecha no toque
-function Section({ icon: Icon, title, right, defaultOpen = false, children }) {
-  return (
-    <details className="adm-sec" open={defaultOpen}>
-      <summary className="adm-sec__head">
-        <span className="adm-sec__title">
-          {Icon && <Icon size={15} />}
-          {title}
-        </span>
-        {right && <span className="adm-sec__right">{right}</span>}
-        <ChevronDown size={16} className="adm-sec__chev" />
-      </summary>
-      <div className="adm-sec__body">{children}</div>
-    </details>
-  )
-}
 
 export default function Dashboard() {
   const { signOut } = useAuth()
-  const { settings, loading: loadingSettings } = useSettings()
-  const { entries, loading: loadingQueue } = useQueue({ withTelefone: true })
+  const { settings, loading: loadingSettings, refetch: refetchSettings } = useSettings()
+  const { entries, loading: loadingQueue, refetch: refetchQueue } = useQueue()
+  const { conversas, loading: loadingConversas, refetch: refetchConversas } = useConversas()
+  const agora = useAgora()
+  // sem cron no banco: o painel aberto também empurra o encerramento da meia-noite
+  useEncerramento(settings?.encerramento_automatico === true)
+
+  const [aba, setAba] = useState('fila')
+  const [chatAberto, setChatAberto] = useState(null)
+  const [erroPalco, setErroPalco] = useState('')
 
   const ranked = activeRanked(entries)
-  const aberto = settings ? abertoAgora(settings) : false
+  const tocando = ranked.find((e) => e.status === 'playing')
+  const proximo = ranked.find((e) => e.status === 'waiting')
+  const aberto = settings ? abertoAgora(settings, agora) : false
+  const naoLidas = conversas.reduce((acc, c) => acc + (c.nao_lidas_admin || 0), 0)
+
+  function abrirChatDoPerfil(perfilId) {
+    setChatAberto(perfilId)
+    setAba('chat')
+  }
+
+  async function chamar(id) {
+    setErroPalco('')
+    try {
+      if (LOCAL) {
+        localDb.setEntryStatus(id, 'playing')
+      } else {
+        const { error } = await supabase.from('queue_entries').update({ status: 'playing' }).eq('id', id)
+        if (error) throw error
+      }
+    } catch (e) {
+      setErroPalco(
+        e.code === '23505' || e.message === 'JA_TEM_UM_NO_PALCO'
+          ? 'Já tem alguém no palco. Conclua antes de chamar outra.'
+          : 'Não deu pra atualizar. Tenta de novo.'
+      )
+    } finally {
+      refetchQueue()
+    }
+  }
+
+  async function concluir(id) {
+    setErroPalco('')
+    try {
+      if (LOCAL) {
+        localDb.setEntryStatus(id, 'done')
+      } else {
+        const { error } = await supabase.from('queue_entries').update({ status: 'done' }).eq('id', id)
+        if (error) throw error
+      }
+    } catch {
+      setErroPalco('Não deu pra atualizar. Tenta de novo.')
+    } finally {
+      refetchQueue()
+    }
+  }
+
+  async function limparTudo() {
+    const { error } = await supabase.rpc('admin_limpar_dados')
+    refetchQueue()
+    refetchConversas()
+    return { ok: !error, erro: error?.message }
+  }
+
+  async function reiniciarChats() {
+    const { error } = await supabase.rpc('admin_reiniciar_chats')
+    refetchConversas()
+    return { ok: !error, erro: error?.message }
+  }
 
   return (
     <div className="q-page">
@@ -75,7 +110,7 @@ export default function Dashboard() {
             Painel
           </span>
           <div className="adm-actions">
-            <Link to="/" className="q-back"><ExternalLink size={14} /> Ver site</Link>
+            <Link to="/" className="q-back"><ExternalLink size={14} /> Ver fila</Link>
             {LOCAL && (
               <button type="button" className="q-back" onClick={() => localDb.reset()}>Resetar dados</button>
             )}
@@ -83,44 +118,95 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="adm-stack">
-          {/* 1 — casa aberta */}
-          {!loadingSettings && settings && (
-            <Section
-              icon={aberto ? DoorOpen : DoorClosed}
-              title="Casa"
-              defaultOpen
-              right={
-                <span className={`adm-status__badge ${aberto ? 'adm-status__badge--on' : 'adm-status__badge--off'}`}>
-                  <span className="adm-status__dot" />
-                  {aberto ? 'Aberta agora' : 'Fechada agora'}
-                </span>
-              }
-            >
-              <ModoControls settings={settings} />
-            </Section>
-          )}
+        <div className="adm-top-grid">
+          <div className={`adm-palco ${tocando ? 'adm-palco--on' : ''}`}>
+            <span className={`adm-status__badge ${aberto ? 'adm-status__badge--on' : 'adm-status__badge--off'}`}>
+              <span className="adm-status__dot" /> {aberto ? 'Casa aberta' : 'Casa fechada'}
+            </span>
 
-          {/* 2 — fila */}
-          <Section
-            icon={ListMusic}
-            title={`Fila · ${ranked.length} na vez`}
-            defaultOpen
-          >
-            {loadingQueue ? <p className="q-note">Carregando…</p> : <QueueBody entries={entries} />}
-          </Section>
+            {erroPalco && <p className="q-error">{erroPalco}</p>}
 
-          {/* 3 — horário de funcionamento */}
-          {!loadingSettings && settings && (
-            <Section icon={Clock} title="Horário de funcionamento">
-              <HorarioForm settings={settings} />
-            </Section>
-          )}
+            {tocando ? (
+              <>
+                <div className="adm-palco__now">
+                  <Mic2 size={22} />
+                  <div>
+                    <b>Nº {tocando.numero_musica}</b>
+                    <span>{tocando.nome} — no palco</span>
+                  </div>
+                </div>
+                <button className="q-btn q-btn--primary" onClick={() => concluir(tocando.id)}>
+                  <Check size={16} /> Concluir
+                </button>
+              </>
+            ) : proximo ? (
+              <>
+                <div className="adm-palco__now adm-palco__now--off">
+                  <Mic2 size={22} />
+                  <div>
+                    <b>Nº {proximo.numero_musica}</b>
+                    <span>{proximo.nome} — a seguir</span>
+                  </div>
+                </div>
+                <button className="q-btn q-btn--primary" onClick={() => chamar(proximo.id)}>
+                  <Mic2 size={16} /> Chamar
+                </button>
+              </>
+            ) : (
+              <p className="q-note q-note--soft">Ninguém na fila agora.</p>
+            )}
+          </div>
 
-          {/* 4 — pedidos de música */}
-          <Section icon={BarChart3} title="Pedidos de música">
-            {loadingQueue ? <p className="q-note">Carregando…</p> : <StatsBody entries={entries} />}
-          </Section>
+          {!loadingQueue && <StatsBody entries={entries} />}
+        </div>
+
+        {!loadingQueue && <ProximasBar ranked={ranked} />}
+
+        <div className="adm-layout">
+          <nav className="adm-sidebar" aria-label="Seções do painel">
+            {ABAS.map(([val, label, Icon]) => (
+              <button
+                key={val}
+                type="button"
+                className={`adm-sidebar__item ${aba === val ? 'is-active' : ''}`}
+                onClick={() => setAba(val)}
+                aria-current={aba === val ? 'page' : undefined}
+              >
+                <Icon size={20} />
+                <span>{label}</span>
+                {val === 'chat' && naoLidas > 0 && <span className="adm-chat__badge adm-sidebar__badge">{naoLidas}</span>}
+              </button>
+            ))}
+          </nav>
+
+          <main className="adm-main">
+            {aba === 'fila' && (
+              <div className="q-card">
+                <h3 className="adm-h2"><ListMusic size={15} /> Fila · {ranked.length} na vez</h3>
+                {loadingQueue ? <p className="q-note">Carregando…</p> : <FilaPanel entries={entries} onAbrirChat={abrirChatDoPerfil} onChanged={refetchQueue} />}
+              </div>
+            )}
+
+            {aba === 'chat' && (
+              <ChatPanel
+                aberta={chatAberto}
+                onSelecionar={setChatAberto}
+                conversas={conversas}
+                loadingConversas={loadingConversas}
+                onReiniciarChats={LOCAL ? null : reiniciarChats}
+              />
+            )}
+
+            {aba === 'musicas' && <MusicasPanel />}
+
+            {aba === 'casa' && !loadingSettings && settings && (
+              <CasaPanel
+                settings={settings}
+                onChanged={refetchSettings}
+                onLimparTudo={LOCAL ? null : limparTudo}
+              />
+            )}
+          </main>
         </div>
       </div>
     </div>
@@ -136,174 +222,13 @@ function StatsBody({ entries }) {
     ['Ano', s.ano],
   ]
   return (
-    <div className="adm-stats">
-      {tiles.map(([label, n]) => (
-        <div key={label} className="adm-stat">
-          <b>{n}</b>
-          <span>{label}</span>
-        </div>
+    <p className="adm-stats">
+      {tiles.map(([label, n], i) => (
+        <span key={label} className="adm-stats__item">
+          {i > 0 && <span className="adm-stats__dot" aria-hidden="true">·</span>}
+          <b>{n}</b> {label}
+        </span>
       ))}
-    </div>
-  )
-}
-
-function ModoControls({ settings }) {
-  const modo = settings.abertura_modo || 'auto'
-
-  async function setModo(novo) {
-    if (novo === modo) return
-    if (LOCAL) return localDb.updateSettings({ abertura_modo: novo })
-    await supabase.from('settings').update({ abertura_modo: novo }).eq('id', 1)
-  }
-
-  return (
-    <>
-      <div className="adm-modos">
-        {MODOS.map(([val, label, Icon]) => (
-          <button
-            key={val}
-            type="button"
-            className={`adm-modo ${modo === val ? 'adm-modo--on' : ''}`}
-            onClick={() => setModo(val)}
-          >
-            <Icon size={15} /> {label}
-          </button>
-        ))}
-      </div>
-      <p className="adm-modo__hint">
-        {modo === 'auto'
-          ? 'Abre e fecha sozinho pelo horário de funcionamento.'
-          : modo === 'aberto'
-            ? 'Casa forçada aberta — ignora o horário até você voltar pra Automático.'
-            : 'Casa forçada fechada — ignora o horário até você voltar pra Automático.'}
-      </p>
-    </>
-  )
-}
-
-function HorarioForm({ settings }) {
-  const [horario, setHorario] = useState(settings.horario_funcionamento || {})
-  const [salvando, setSalvando] = useState(false)
-
-  async function salvarHorario(e) {
-    e.preventDefault()
-    setSalvando(true)
-    if (LOCAL) localDb.updateSettings({ horario_funcionamento: horario })
-    else await supabase.from('settings').update({ horario_funcionamento: horario }).eq('id', 1)
-    setSalvando(false)
-  }
-
-  return (
-    <form onSubmit={salvarHorario}>
-      <div className="adm-hlist">
-        {DIAS.map(([key, label]) => (
-          <label key={key} className="adm-hrow">
-            <span>{label}</span>
-            <input
-              value={horario[key] || ''}
-              placeholder="19:00-23:00  ou  fechado"
-              onChange={(e) => setHorario({ ...horario, [key]: e.target.value })}
-            />
-          </label>
-        ))}
-      </div>
-      <button className="q-btn q-btn--ghost q-btn--sm" type="submit" disabled={salvando}>
-        <Save size={15} /> {salvando ? 'Salvando…' : 'Salvar horário'}
-      </button>
-    </form>
-  )
-}
-
-function QueueBody({ entries }) {
-  const ranked = activeRanked(entries)
-  const done = entries.filter((e) => e.status === 'done')
-
-  async function setStatus(id, status) {
-    if (LOCAL) return localDb.setEntryStatus(id, status)
-    await supabase.from('queue_entries').update({ status }).eq('id', id)
-  }
-
-  async function remover(id) {
-    if (LOCAL) return localDb.deleteEntry(id)
-    await supabase.from('queue_entries').delete().eq('id', id)
-  }
-
-  async function mover(index, direction) {
-    const alvo = ranked[index]
-    const vizinho = ranked[index + direction]
-    if (!alvo || !vizinho) return
-    if (LOCAL) return localDb.swapPositions(alvo.id, vizinho.id)
-    await supabase.from('queue_entries').update({ posicao: vizinho.posicao }).eq('id', alvo.id)
-    await supabase.from('queue_entries').update({ posicao: alvo.posicao }).eq('id', vizinho.id)
-  }
-
-  // abre o WhatsApp do admin já na conversa do cliente, texto pronto
-  function avisar(e) {
-    const url = linkWhatsApp(e.telefone, mensagemAviso(tipoAviso(e), e))
-    if (url) window.open(url, '_blank', 'noopener,noreferrer')
-  }
-
-  return (
-    <>
-      {ranked.length === 0 && (
-        <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>Fila vazia.</p>
-      )}
-
-      <div className="adm-queue">
-        {ranked.map((e, i) => (
-          <div key={e.id} className={`adm-item ${e.status === 'playing' ? 'adm-item--playing' : ''}`}>
-            <span className="adm-item__rank">{e.rank}</span>
-            <div className="adm-item__body">
-              <div className="adm-item__title">Nº {e.numero_musica} · {e.nome}</div>
-              <div className="adm-item__meta">
-                <span className={`adm-chip adm-chip--${e.status}`}>
-                  {e.status === 'playing' ? 'no palco' : 'aguardando'}
-                </span>
-                {e.telefone && <span className="adm-item__tel">{formatTelBR(e.telefone)}</span>}
-              </div>
-            </div>
-            <div className="adm-item__acts">
-              <button className="q-iconbtn" onClick={() => mover(i, -1)} disabled={i === 0} aria-label="Subir">
-                <ChevronUp size={15} />
-              </button>
-              <button className="q-iconbtn" onClick={() => mover(i, 1)} disabled={i === ranked.length - 1} aria-label="Descer">
-                <ChevronDown size={15} />
-              </button>
-              {e.status === 'waiting' && (
-                <button className="q-btn q-btn--primary q-btn--sm" onClick={() => setStatus(e.id, 'playing')}>
-                  <Play size={14} /> Chamar
-                </button>
-              )}
-              {e.status === 'playing' && (
-                <button className="q-btn q-btn--primary q-btn--sm" onClick={() => setStatus(e.id, 'done')}>
-                  <Check size={14} /> Concluir
-                </button>
-              )}
-              {e.telefone && (e.rank <= 2 || e.status === 'playing') && (
-                <button
-                  className="q-btn q-btn--wa q-btn--sm"
-                  onClick={() => avisar(e)}
-                  title={tipoAviso(e) === 'vez' ? 'Avisar no WhatsApp: é a vez' : 'Avisar no WhatsApp: é o próximo'}
-                >
-                  <MessageCircle size={14} /> {tipoAviso(e) === 'vez' ? 'É a vez' : 'Avisar'}
-                </button>
-              )}
-              <button className="q-iconbtn" onClick={() => remover(e.id)} aria-label="Remover">
-                <Trash2 size={15} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {done.length > 0 && (
-        <details className="adm-done">
-          <summary>Concluídas ({done.length})</summary>
-          {done.map((e) => (
-            <div key={e.id} className="adm-done__item">Nº {e.numero_musica} — {e.nome}</div>
-          ))}
-        </details>
-      )}
-    </>
+    </p>
   )
 }
