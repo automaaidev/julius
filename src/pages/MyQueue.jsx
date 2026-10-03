@@ -12,6 +12,7 @@ import {
   NotebookPen,
   Flame,
   Moon,
+  Check,
 } from 'lucide-react'
 import { LOCAL } from '../lib/flags'
 import { useSettings } from '../hooks/useSettings'
@@ -23,6 +24,8 @@ import { useAgora } from '../hooks/useAgora'
 import { useEncerramento } from '../hooks/useEncerramento'
 import { getPerfilId, getPerfilChave, getPerfilNome, setPerfilNome } from '../lib/perfil'
 import { useTitulos } from '../hooks/useTitulos'
+import { useConferirNumero } from '../hooks/useConferirNumero'
+import { conferirNumero, rotuloMusica } from '../lib/catalogo'
 import { useCantadas, registrarCantada, jaCantei, adicionarMusica } from '../lib/cantadas'
 import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
 import Caderninho from './Caderninho'
@@ -47,6 +50,7 @@ export default function MyQueue() {
   const [erro, setErro] = useState('')
   const [aba, setAba] = useState('pedir')
   const [repetida, setRepetida] = useState(null) // número que a pessoa já cantou, esperando confirmação
+  const [naoExiste, setNaoExiste] = useState(null) // número que não está no cardápio, esperando decisão
   const [cancelando, setCancelando] = useState(null) // id da entrada com "tirar da fila?" aberto
   const [buscando, setBuscando] = useState(false) // folha de busca de música aberta
 
@@ -68,6 +72,7 @@ export default function MyQueue() {
   const ranked = activeRanked(entries)
   const minhas = ranked.filter((e) => e.perfil_id === perfilId)
   const titulos = useTitulos(minhas.map((e) => e.numero_musica))
+  const conferido = useConferirNumero(campoNumero)
 
   // música minha que foi pro palco e terminou -> vira "já cantei" no caderninho
   useEffect(() => {
@@ -110,6 +115,7 @@ export default function MyQueue() {
   function escolherNumero(n) {
     setCampoNumero(n)
     setRepetida(null)
+    setNaoExiste(null)
     setErro('')
     setAba('pedir')
     setTimeout(() => numeroRef.current?.focus(), 60)
@@ -143,6 +149,7 @@ export default function MyQueue() {
       const r = await enviarNumero(n)
       setCampoNumero('')
       setRepetida(null)
+      setNaoExiste(null)
       if (!r.ok) setErro(r.erro)
       refetchQueue()
     } finally {
@@ -150,7 +157,7 @@ export default function MyQueue() {
     }
   }
 
-  function enviarMsg(e) {
+  async function enviarMsg(e) {
     e.preventDefault()
     const n = campoNumero.trim()
     if (!n) return
@@ -158,6 +165,15 @@ export default function MyQueue() {
     // música e bagunçar a ordem da fila
     if (jaCantei(cantadas, n)) {
       setRepetida(n)
+      return
+    }
+    // o número existe no cardápio? Se não existe, pergunta antes (erro de digitação é
+    // o mais comum). Sem como conferir (banco fora, catálogo não carregado), segue.
+    setEnviando(true)
+    const c = await conferirNumero(n)
+    setEnviando(false)
+    if (c.existe === false) {
+      setNaoExiste(n)
       return
     }
     enviar(n)
@@ -374,6 +390,23 @@ export default function MyQueue() {
                 </div>
               )}
 
+              {naoExiste && (
+                <div className="q-warn" role="alert">
+                  <span>
+                    Não achei a <b>Nº {naoExiste}</b> no cardápio. Confira se digitou certo — ou procure pelo nome da
+                    música.
+                  </span>
+                  <div className="q-cancel__acts">
+                    <button type="button" className="q-btn q-btn--primary q-btn--sm" onClick={() => setBuscando(true)}>
+                      Abrir o cardápio
+                    </button>
+                    <button type="button" className="q-btn q-btn--ghost q-btn--sm" onClick={() => enviar(naoExiste)} disabled={enviando}>
+                      Pedir mesmo assim
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {identificando ? (
                 <form className="chat-composer" onSubmit={confirmarNome}>
                   <input
@@ -400,6 +433,14 @@ export default function MyQueue() {
                     : `Você já tem ${limite} músicas na fila. Quando uma terminar, dá pra pedir outra aqui.`}
                 </p>
               ) : (
+                <>
+                <p className={`chat-confere ${conferido.estado === 'existe' ? 'is-ok' : ''}`} aria-live="polite">
+                  {conferido.estado === 'existe' && (
+                    <>
+                      <Check size={14} aria-hidden="true" /> {rotuloMusica(conferido.musica)}
+                    </>
+                  )}
+                </p>
                 <form className="chat-composer" onSubmit={enviarMsg}>
                   <input
                     ref={numeroRef}
@@ -407,6 +448,7 @@ export default function MyQueue() {
                     onChange={(e) => {
                       setCampoNumero(e.target.value.replace(/\D/g, '').slice(0, 5))
                       setRepetida(null)
+                      setNaoExiste(null)
                     }}
                     inputMode="numeric"
                     pattern="[0-9]*"
@@ -418,6 +460,7 @@ export default function MyQueue() {
                     <Send size={16} />
                   </button>
                 </form>
+                </>
               )}
             </div>
 

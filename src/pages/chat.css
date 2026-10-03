@@ -233,3 +233,19 @@ a.chat-bubble { text-decoration: none; }
   .adm-chat__thread.is-hidden-mobile { display: none; }
   .adm-chat__back { display: inline-block; }
 }
+
+/* confirmação do número digitado: "✓ Título — Cantor". Linha com altura fixa pra o
+   campo de baixo não pular quando ela aparece/some. */
+.chat-confere {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.5rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  color: var(--pessego-escuro);
+}
+
+.chat-confere.is-ok { color: var(--luz-suave); }
+.chat-confere svg { flex: none; color: var(--luz); }

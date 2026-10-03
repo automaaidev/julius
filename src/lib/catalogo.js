@@ -82,30 +82,68 @@ export function aoMudarCatalogo(cb) {
 export function catalogoMudou() {
   cache.clear()
   paginas.clear()
+  catalogoCompleto = null
   ouvintes.forEach((cb) => cb())
+}
+
+// busca no banco o que ainda não está no cache; LANÇA se o banco não responder
+async function carregarNumeros(numeros) {
+  const faltando = numeros.filter((n) => !cache.has(n))
+  if (faltando.length === 0) return
+  let rows = []
+  if (LOCAL) {
+    await localDb.ready
+    rows = localDb.getMusicas(faltando)
+  } else if (supabase) {
+    const { data, error } = await supabase.from('musicas').select('numero, titulo, artista').in('numero', faltando)
+    if (error) throw error
+    rows = data ?? []
+  }
+  for (const n of faltando) cache.set(n, null)
+  for (const r of rows) cache.set(r.numero, r)
 }
 
 export async function obterMusicas(numeros) {
   const unicos = [...new Set(numeros.filter(Boolean))]
-  const faltando = unicos.filter((n) => !cache.has(n))
-  if (faltando.length > 0) {
-    try {
-      let rows = []
-      if (LOCAL) {
-        await localDb.ready
-        rows = localDb.getMusicas(faltando)
-      } else if (supabase) {
-        const { data, error } = await supabase.from('musicas').select('numero, titulo, artista').in('numero', faltando)
-        if (error) throw error
-        rows = data ?? []
-      }
-      for (const n of faltando) cache.set(n, null)
-      for (const r of rows) cache.set(r.numero, r)
-    } catch {
-      /* sem catálogo (ou migration pendente): fica só o número, sem cachear */
-    }
+  try {
+    await carregarNumeros(unicos)
+  } catch {
+    /* sem catálogo (ou migration pendente): fica só o número, sem cachear */
   }
   return new Map(unicos.map((n) => [n, cache.get(n) ?? null]))
+}
+
+// O catálogo só serve de conferência se estiver carregado de verdade: com ele vazio
+// (ainda não importado) ou quase vazio, "não achei" seria mentira e travaria todo pedido.
+const CATALOGO_MINIMO = 500
+let catalogoCompleto = null // Promise<boolean>, por sessão
+
+function conferenciaDisponivel() {
+  if (!catalogoCompleto) {
+    catalogoCompleto = contarCatalogo()
+      .then((n) => n >= CATALOGO_MINIMO)
+      .catch(() => {
+        catalogoCompleto = null // tenta de novo na próxima
+        return false
+      })
+  }
+  return catalogoCompleto
+}
+
+// O número existe no cardápio? { existe: true, musica } | { existe: false } | { existe: null }
+// (null = não dá pra saber: banco fora do ar ou catálogo não carregado — nesse caso
+// quem chama NÃO deve barrar o pedido).
+export async function conferirNumero(numero) {
+  const n = String(numero ?? '').trim()
+  if (!n) return { existe: null }
+  try {
+    await carregarNumeros([n])
+    const musica = cache.get(n)
+    if (musica) return { existe: true, musica }
+    return (await conferenciaDisponivel()) ? { existe: false } : { existe: null }
+  } catch {
+    return { existe: null }
+  }
 }
 
 // "Título — Cantor" pra mostrar numa linha só

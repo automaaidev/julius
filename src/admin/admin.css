@@ -596,6 +596,7 @@
 .adm-incluir__row input:first-child { flex: 1; min-width: 140px; }
 .adm-incluir__row input:nth-child(2) { width: 90px; flex: none; }
 .adm-incluir__musica { margin: 0; font-size: 0.85rem; color: var(--luz-suave); }
+.adm-incluir__musica.is-aviso { color: #ffcf8a; }
 
 /* ---- regras da fila (aba Casa) ---- */
 .adm-regra {

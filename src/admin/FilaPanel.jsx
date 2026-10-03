@@ -5,6 +5,7 @@ import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import { activeRanked } from '../hooks/useQueue'
 import { useTitulos } from '../hooks/useTitulos'
+import { useConferirNumero } from '../hooks/useConferirNumero'
 import { rotuloMusica } from '../lib/catalogo'
 import BuscaMusicas from '../components/BuscaMusicas'
 import { mapErroAdmin } from './erros'
@@ -142,7 +143,7 @@ function IncluirSemCelular({ onChanged }) {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [buscando, setBuscando] = useState(false)
-  const escolhida = useTitulos(numero ? [numero] : []).get(numero)
+  const conferido = useConferirNumero(numero)
 
   async function incluir(e) {
     e.preventDefault()
@@ -204,7 +205,12 @@ function IncluirSemCelular({ onChanged }) {
           <Search size={17} />
         </button>
       </div>
-      {escolhida?.titulo && <p className="adm-incluir__musica">{rotuloMusica(escolhida)}</p>}
+      {conferido.estado === 'existe' && <p className="adm-incluir__musica">{rotuloMusica(conferido.musica)}</p>}
+      {conferido.estado === 'nao' && (
+        <p className="adm-incluir__musica is-aviso">
+          Nº {numero} não está no cardápio — confira o número (dá pra incluir mesmo assim).
+        </p>
+      )}
       {erro && (
         <p className="q-error">
           <AlertCircle size={16} /> {erro}
