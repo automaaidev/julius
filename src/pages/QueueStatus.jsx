@@ -4,6 +4,7 @@ import { ArrowLeft, Radio, RefreshCw, CheckCircle2, CircleOff } from 'lucide-rea
 import { useQueue, activeRanked } from '../hooks/useQueue'
 import { useTitulos } from '../hooks/useTitulos'
 import SinalChip from '../components/SinalChip'
+import { mostraPosicao, AVISO_NA_FILA } from '../lib/fila'
 import { rotuloMusica } from '../lib/catalogo'
 import './queue.css'
 
@@ -76,8 +77,17 @@ export default function QueueStatus() {
                 </div>
               ) : (
                 <div className="q-big">
-                  <div className="q-big__label">Sua posição na fila</div>
-                  <div className="q-big__num">{meuRank ?? '—'}</div>
+                  {meuRank != null && !mostraPosicao(meuRank) ? (
+                    <>
+                      <div className="q-big__label">Você está na fila</div>
+                      <p className="q-big__msg">{AVISO_NA_FILA}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="q-big__label">Sua posição na fila</div>
+                      <div className="q-big__num">{meuRank ?? '—'}</div>
+                    </>
+                  )}
                   <span className="q-big__sub">
                     <RefreshCw size={12} /> Atualiza automaticamente
                   </span>

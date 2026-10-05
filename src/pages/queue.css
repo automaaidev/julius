@@ -469,6 +469,16 @@
   margin: 0.3rem 0;
 }
 
+.q-big__msg {
+  margin: 0.9rem auto 0.4rem;
+  max-width: 28ch;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  color: var(--pessego);
+}
+
+.q-song__rank--espera { gap: 0.2rem; color: var(--luz-suave); }
+
 .q-big__sub {
   font-size: 0.85rem;
   color: var(--texto-claro);

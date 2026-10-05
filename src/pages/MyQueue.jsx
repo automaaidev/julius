@@ -14,6 +14,7 @@ import {
   Moon,
   Check,
   Megaphone,
+  Hourglass,
 } from 'lucide-react'
 import { LOCAL } from '../lib/flags'
 import { useSettings } from '../hooks/useSettings'
@@ -32,6 +33,7 @@ import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
 import Duvidas, { BotaoDuvidas } from '../components/Duvidas'
 import SinalChip from '../components/SinalChip'
 import { useAvisos } from '../hooks/useAvisos'
+import { mostraPosicao, textoParaCliente } from '../lib/fila'
 import Caderninho from './Caderninho'
 import './queue.css'
 import './chat.css'
@@ -308,17 +310,28 @@ export default function MyQueue() {
                         </div>
                       ) : (
                         <div className="q-song">
-                          <span className="q-song__rank">
-                            <b>{minha.rank}</b>
-                            <span>na fila</span>
-                          </span>
+                          {mostraPosicao(minha.rank) ? (
+                            <span className="q-song__rank">
+                              <b>{minha.rank}</b>
+                              <span>na fila</span>
+                            </span>
+                          ) : (
+                            <span className="q-song__rank q-song__rank--espera">
+                              <Hourglass size={22} aria-hidden="true" />
+                              <span>na fila</span>
+                            </span>
+                          )}
                           <span className="q-song__body">
                             <span className="q-song__title">
                               {titulos.get(minha.numero_musica)?.titulo ?? `Nº ${minha.numero_musica}`}
                             </span>
                             <span className="q-song__meta">
                               {titulos.get(minha.numero_musica)?.titulo && `Nº ${minha.numero_musica} · `}
-                              {minha.rank === 1 ? 'você é o próximo' : `${minha.rank - 1} na frente`}
+                              {!mostraPosicao(minha.rank)
+                                ? 'Avisamos quando você for o próximo'
+                                : minha.rank === 1
+                                  ? 'você é o próximo'
+                                  : `${minha.rank - 1} na frente`}
                             </span>
                           </span>
                         </div>
@@ -371,11 +384,11 @@ export default function MyQueue() {
                   mensagens.map((m) =>
                     m.queue_entry_id ? (
                       <Link key={m.id} to={`/fila/${m.queue_entry_id}`} className={`chat-bubble chat-bubble--${m.autor}`}>
-                        {m.texto}
+                        {textoParaCliente(m.texto)}
                       </Link>
                     ) : (
                       <div key={m.id} className={`chat-bubble chat-bubble--${m.autor}`}>
-                        {m.texto}
+                        {textoParaCliente(m.texto)}
                       </div>
                     )
                   )}
