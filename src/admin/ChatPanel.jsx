@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Send, Trash2, User, MessageSquareOff } from 'lucide-react'
 import { useThread } from '../hooks/useChat'
-import { RESPOSTAS_RAPIDAS } from '../lib/avisos'
+import { useAvisos } from '../hooks/useAvisos'
 import AcaoPerigosa from './AcaoPerigosa'
 
 function tempoRelativo(iso) {
@@ -78,6 +78,7 @@ export default function ChatPanel({ aberta, onSelecionar, conversas, loadingConv
 
 function Thread({ perfilId, nome, onVoltar }) {
   const { mensagens, loading, enviar, apagar, marcarLida } = useThread(perfilId)
+  const { itens: respostas } = useAvisos('resposta') // respostas prontas (aba Avisos)
   const [texto, setTexto] = useState('')
 
   useEffect(() => {
@@ -112,11 +113,11 @@ function Thread({ perfilId, nome, onVoltar }) {
         ))}
       </div>
 
-      {RESPOSTAS_RAPIDAS.length > 0 && (
+      {respostas.length > 0 && (
         <div className="adm-chat__quick">
-          {RESPOSTAS_RAPIDAS.map((r) => (
-            <button key={r} type="button" className="adm-chat__chip" onClick={() => enviar(r)}>
-              {r}
+          {respostas.map((r) => (
+            <button key={r.id} type="button" className="adm-chat__chip" onClick={() => enviar(r.texto)} title={r.texto}>
+              {r.titulo}
             </button>
           ))}
         </div>

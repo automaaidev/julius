@@ -557,7 +557,32 @@
 }
 
 /* "Buscar música": fica logo abaixo das abas, no mesmo lugar nas duas */
-.q-busca { margin: -0.2rem 0 0.9rem; }
+.q-busca { display: flex; gap: 0.5rem; margin: -0.2rem 0 0.9rem; }
+.q-busca .busca-btn { flex: 1; min-width: 0; }
+.q-busca .busca-btn--duvidas { flex: 0 0 auto; }
+
+/* aviso da casa (aba Avisos do painel): fica entre o cabeçalho e as abas */
+.q-avisos { display: grid; gap: 0.5rem; margin: -0.4rem 0 1rem; }
+
+.q-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(231, 178, 76, 0.45);
+  border-radius: 12px;
+  background: rgba(231, 178, 76, 0.12);
+  color: var(--luz-suave);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.q-aviso svg { flex: none; margin-top: 0.12rem; color: var(--luz); }
+.q-aviso b { color: var(--pessego); }
+
+/* sinal do operador no pedido */
+.q-sinal { display: flex; margin: 0.6rem 0 0; }
 
 .q-linkbtn {
   display: block;

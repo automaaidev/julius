@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Radio, RefreshCw, CheckCircle2, CircleOff } from 'lucide-react'
 import { useQueue, activeRanked } from '../hooks/useQueue'
 import { useTitulos } from '../hooks/useTitulos'
+import SinalChip from '../components/SinalChip'
 import { rotuloMusica } from '../lib/catalogo'
 import './queue.css'
 
@@ -80,6 +81,11 @@ export default function QueueStatus() {
                   <span className="q-big__sub">
                     <RefreshCw size={12} /> Atualiza automaticamente
                   </span>
+                  {minha.sinal && (
+                    <p className="q-sinal" style={{ justifyContent: 'center' }}>
+                      <SinalChip sinal={minha.sinal} />
+                    </p>
+                  )}
                 </div>
               )}
             </motion.div>

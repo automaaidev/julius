@@ -3,7 +3,10 @@ import { supabase, realtimeTopic } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 
-const COLS = 'id,nome,perfil_id,numero_musica,status,posicao,created_at'
+const COLS_BASE = 'id,nome,perfil_id,numero_musica,status,posicao,created_at'
+// `sinal` veio na migration 20261005_avisos_e_sinais.sql. Enquanto ela não rodou, pedir a
+// coluna daria erro e a fila inteira sumiria da tela — então cai pras colunas antigas.
+let comSinal = true
 
 // Traz TODAS as entradas (inclui 'done') pro admin; tela do cliente
 // filtra localmente o que precisa.
@@ -19,11 +22,17 @@ export function useQueue() {
       return
     }
     if (!supabase) return
-    const { data } = await supabase
-      .from('queue_entries')
-      .select(COLS)
-      .order('posicao', { ascending: true })
-      .then((r) => r, () => ({ data: null }))
+    const buscar = (cols) =>
+      supabase
+        .from('queue_entries')
+        .select(cols)
+        .order('posicao', { ascending: true })
+        .then((r) => r, () => ({ data: null, error: { message: 'rede' } }))
+    let { data, error } = await buscar(comSinal ? `${COLS_BASE},sinal` : COLS_BASE)
+    if (error && comSinal && /sinal/i.test(error.message ?? '')) {
+      comSinal = false
+      ;({ data } = await buscar(COLS_BASE))
+    }
     setEntries(data ?? [])
     setLoading(false)
   }, [])

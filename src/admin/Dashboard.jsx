@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ExternalLink, LogOut, Mic2, Check, ListMusic, MessageSquare, Settings2, Music2 } from 'lucide-react'
+import { ExternalLink, LogOut, Mic2, Check, ListMusic, MessageSquare, Settings2, Music2, Megaphone } from 'lucide-react'
 import { supabase } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
@@ -16,6 +16,7 @@ import FilaPanel from './FilaPanel'
 import ChatPanel from './ChatPanel'
 import CasaPanel from './CasaPanel'
 import MusicasPanel from './MusicasPanel'
+import AvisosPanel from './AvisosPanel'
 import ProximasBar from './ProximasBar'
 import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
 import { copiarTexto } from '../lib/clipboard'
@@ -27,6 +28,7 @@ const ABAS = [
   ['fila', 'Fila', ListMusic],
   ['chat', 'Chat', MessageSquare],
   ['musicas', 'Músicas', Music2],
+  ['avisos', 'Avisos', Megaphone],
   ['casa', 'Casa', Settings2],
 ]
 
@@ -208,6 +210,8 @@ export default function Dashboard() {
             )}
 
             {aba === 'musicas' && <MusicasPanel />}
+
+            {aba === 'avisos' && <AvisosPanel />}
 
             {aba === 'casa' && !loadingSettings && settings && (
               <CasaPanel

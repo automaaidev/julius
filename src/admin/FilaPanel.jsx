@@ -8,6 +8,8 @@ import { useTitulos } from '../hooks/useTitulos'
 import { useConferirNumero } from '../hooks/useConferirNumero'
 import { rotuloMusica } from '../lib/catalogo'
 import BuscaMusicas from '../components/BuscaMusicas'
+import SinalChip from '../components/SinalChip'
+import { SINAIS, definirSinal, mensagemDoOperador } from '../lib/avisosCasa'
 import { mapErroAdmin } from './erros'
 
 // fila do painel admin: chamar/concluir, reordenar, apagar e abrir o chat
@@ -40,6 +42,36 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
     }
   }
 
+  // sinal no pedido: 👀 visto · 🎶 no aparelho · ❓ confirmar o número. Tocar de novo tira.
+  async function marcar(e, sinal) {
+    setErro('')
+    const novo = e.sinal === sinal ? null : sinal
+    try {
+      await definirSinal(e.id, novo)
+      if (novo === 'ajuda') {
+        await mensagemDoOperador(
+          e.perfil_id,
+          `❓ Sobre a Nº ${e.numero_musica}: a equipe precisa confirmar o número com você. Confere se está certo ou procura pelo nome no “Cardápio de músicas”.`
+        )
+      }
+      onChanged?.()
+    } catch (err) {
+      setErro(mapErroAdmin(err.message))
+    }
+  }
+
+  const semSinal = ranked.filter((e) => e.status === 'waiting' && !e.sinal)
+
+  async function marcarTodosVistos() {
+    setErro('')
+    try {
+      await definirSinal(semSinal.map((e) => e.id), 'visto')
+      onChanged?.()
+    } catch (err) {
+      setErro(mapErroAdmin(err.message))
+    }
+  }
+
   async function remover(id) {
     if (LOCAL) localDb.deleteEntry(id)
     else await supabase.from('queue_entries').delete().eq('id', id)
@@ -69,6 +101,12 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
 
       <IncluirSemCelular onChanged={onChanged} />
 
+      {semSinal.length > 0 && (
+        <button type="button" className="q-btn q-btn--ghost q-btn--sm adm-vistos" onClick={marcarTodosVistos}>
+          <span aria-hidden="true">👀</span> Marcar {semSinal.length === 1 ? 'o pedido' : `os ${semSinal.length} pedidos`} como visto{semSinal.length === 1 ? '' : 's'}
+        </button>
+      )}
+
       {ranked.length === 0 && (
         <p className="q-note q-note--soft" style={{ textAlign: 'left' }}>Fila vazia.</p>
       )}
@@ -86,6 +124,7 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
                 <span className={`adm-chip adm-chip--${e.status}`}>
                   {e.status === 'playing' ? 'no palco' : 'aguardando'}
                 </span>
+                <SinalChip sinal={e.sinal} curto />
               </div>
             </div>
             <div className="adm-item__acts">
@@ -109,6 +148,23 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
                 <button className="q-btn q-btn--primary q-btn--sm" onClick={() => setStatus(e.id, 'done')}>
                   <Check size={14} /> Concluir
                 </button>
+              )}
+              {e.status === 'waiting' && (
+                <span className="adm-sinais" role="group" aria-label={`Sinal da Nº ${e.numero_musica}`}>
+                  {Object.entries(SINAIS).map(([chave, s]) => (
+                    <button
+                      key={chave}
+                      type="button"
+                      className={`adm-sinal ${e.sinal === chave ? 'is-on' : ''}`}
+                      onClick={() => marcar(e, chave)}
+                      aria-pressed={e.sinal === chave}
+                      aria-label={`${s.rotulo} (Nº ${e.numero_musica})`}
+                      title={s.rotulo}
+                    >
+                      {s.emoji}
+                    </button>
+                  ))}
+                </span>
               )}
               <button className="q-iconbtn" onClick={() => onAbrirChat(e.perfil_id)} aria-label="Abrir chat">
                 <MessageSquare size={15} />

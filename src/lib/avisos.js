@@ -26,8 +26,4 @@ export const MSG = {
   concluido: 'Valeu por cantar! Quando quiser, manda o número da próxima 🎶',
 }
 
-// TODO(dono da casa): escreva de 5 a 8 respostas rápidas pro admin usar no
-// chat, no tom do Juliu's — ex: pedir pra repetir o número, avisar demora,
-// avisar que a música não tá no catálogo, etc. Cada string vira um botão
-// que manda a mensagem pronta na conversa (ver ChatPanel.jsx).
-export const RESPOSTAS_RAPIDAS = []
+// As respostas prontas do operador (botões do chat) agora vivem no banco: aba Avisos do painel.

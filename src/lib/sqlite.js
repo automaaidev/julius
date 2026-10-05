@@ -12,6 +12,7 @@
 import initSqlJs from 'sql.js'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import { normalizar } from './normalizar'
+import { AVISOS_PADRAO } from './avisosPadrao'
 
 const DB_KEY = 'juliu_sqlite_v1'
 
@@ -64,6 +65,15 @@ CREATE TABLE IF NOT EXISTS chat_mensagens (
   queue_entry_id TEXT,
   created_at     TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS avisos (
+  id         TEXT PRIMARY KEY,
+  tipo       TEXT NOT NULL,
+  titulo     TEXT NOT NULL,
+  texto      TEXT NOT NULL,
+  ativo      INTEGER NOT NULL DEFAULT 1,
+  ordem      INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS musicas (
   numero     TEXT PRIMARY KEY,
   titulo     TEXT NOT NULL,
@@ -84,6 +94,7 @@ const COLUNAS_NOVAS = [
   ['settings', 'ultimo_encerramento', 'TEXT'],
   ['settings', 'intervalo_repetir_min', 'INTEGER NOT NULL DEFAULT 30'],
   ['queue_entries', 'cantada_em', 'TEXT'],
+  ['queue_entries', 'sinal', 'TEXT'],
   ['musicas', 'artista', 'TEXT'],
   ['musicas', 'categoria', 'TEXT'],
   ['musicas', 'destaque', 'INTEGER NOT NULL DEFAULT 0'],
@@ -102,6 +113,21 @@ function migrar() {
         db.run('UPDATE musicas SET busca = ? WHERE numero = ?', [normalizar(`${m.titulo} ${m.artista ?? ''}`), m.numero])
       }
     }
+  }
+}
+
+// textos de exemplo do banco de avisos: só entram se a tabela estiver vazia
+function semearAvisos() {
+  if (Number(all('SELECT COUNT(*) AS n FROM avisos')[0]?.n) > 0) return
+  for (const [tipo, titulo, texto, ordem] of AVISOS_PADRAO) {
+    db.run('INSERT INTO avisos (id, tipo, titulo, texto, ativo, ordem, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)', [
+      uuid(),
+      tipo,
+      titulo,
+      texto,
+      ordem,
+      new Date().toISOString(),
+    ])
   }
 }
 
@@ -217,6 +243,7 @@ function seed() {
   stmt.free()
 
   seedChat()
+  semearAvisos()
 }
 
 function seedChat() {
@@ -266,6 +293,7 @@ export const dbReady = (async () => {
       db = new SQL.Database(fromBase64(saved))
       db.run(SCHEMA) // idempotente: só cria o que ainda não existe nesse blob
       migrar()
+      semearAvisos()
       persist()
     } else {
       db = new SQL.Database()
@@ -344,7 +372,7 @@ export function runMany(sql, listaParams) {
 export function reseed() {
   if (!db) return
   db.run(
-    'DROP TABLE IF EXISTS queue_entries; DROP TABLE IF EXISTS settings; DROP TABLE IF EXISTS conversas; DROP TABLE IF EXISTS chat_mensagens; DROP TABLE IF EXISTS musicas;'
+    'DROP TABLE IF EXISTS queue_entries; DROP TABLE IF EXISTS settings; DROP TABLE IF EXISTS conversas; DROP TABLE IF EXISTS chat_mensagens; DROP TABLE IF EXISTS musicas; DROP TABLE IF EXISTS avisos;'
   )
   db.run(SCHEMA)
   seed()

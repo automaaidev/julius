@@ -13,6 +13,7 @@ import {
   Flame,
   Moon,
   Check,
+  Megaphone,
 } from 'lucide-react'
 import { LOCAL } from '../lib/flags'
 import { useSettings } from '../hooks/useSettings'
@@ -28,6 +29,9 @@ import { useConferirNumero } from '../hooks/useConferirNumero'
 import { conferirNumero, rotuloMusica } from '../lib/catalogo'
 import { useCantadas, registrarCantada, jaCantei, adicionarMusica } from '../lib/cantadas'
 import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
+import Duvidas, { BotaoDuvidas } from '../components/Duvidas'
+import SinalChip from '../components/SinalChip'
+import { useAvisos } from '../hooks/useAvisos'
 import Caderninho from './Caderninho'
 import './queue.css'
 import './chat.css'
@@ -53,6 +57,8 @@ export default function MyQueue() {
   const [naoExiste, setNaoExiste] = useState(null) // número que não está no cardápio, esperando decisão
   const [cancelando, setCancelando] = useState(null) // id da entrada com "tirar da fila?" aberto
   const [buscando, setBuscando] = useState(false) // folha de busca de música aberta
+  const [duvidas, setDuvidas] = useState(false) // folha de dúvidas frequentes aberta
+  const { itens: avisosDaCasa } = useAvisos('aviso')
 
   const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave)
 
@@ -234,6 +240,19 @@ export default function MyQueue() {
           )}
         </div>
 
+        {avisosDaCasa.length > 0 && (
+          <div className="q-avisos" role="region" aria-label="Avisos da casa">
+            {avisosDaCasa.map((a) => (
+              <p key={a.id} className="q-aviso">
+                <Megaphone size={16} aria-hidden="true" />
+                <span>
+                  <b>{a.titulo}</b> {a.texto}
+                </span>
+              </p>
+            ))}
+          </div>
+        )}
+
         <div className="q-tabs" role="tablist">
           <button
             type="button"
@@ -256,7 +275,8 @@ export default function MyQueue() {
         </div>
 
         <div className="q-busca">
-          <BotaoCardapio onClick={() => setBuscando(true)}>Cardápio de músicas — veja o número</BotaoCardapio>
+          <BotaoCardapio onClick={() => setBuscando(true)}>Cardápio de músicas</BotaoCardapio>
+          <BotaoDuvidas onClick={() => setDuvidas(true)} />
         </div>
 
         {aba === 'caderninho' && <Caderninho onPedir={escolherNumero} podePedir={podePedir} />}
@@ -304,6 +324,12 @@ export default function MyQueue() {
                         </div>
                       )}
                     </Link>
+
+                    {minha.status === 'waiting' && minha.sinal && (
+                      <p className="q-sinal">
+                        <SinalChip sinal={minha.sinal} />
+                      </p>
+                    )}
 
                     {minha.status === 'waiting' &&
                       (cancelando === minha.id ? (
@@ -487,6 +513,8 @@ export default function MyQueue() {
             )}
           </>
         )}
+
+        {duvidas && <Duvidas onFechar={() => setDuvidas(false)} />}
 
         {buscando && (
           <BuscaMusicas

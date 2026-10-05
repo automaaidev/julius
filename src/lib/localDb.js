@@ -459,6 +459,46 @@ export const localDb = {
     run('UPDATE musicas SET destaque = ? WHERE numero = ?', [valor ? 1 : 0, numero])
   },
 
+  // ---- banco de avisos (faq / aviso / resposta) e sinais na fila ----
+  getAvisos({ tipo = null, incluirInativos = false } = {}) {
+    const cond = []
+    const params = []
+    if (tipo) {
+      cond.push('tipo = ?')
+      params.push(tipo)
+    }
+    if (!incluirInativos) cond.push('ativo = 1')
+    return all(
+      `SELECT * FROM avisos${cond.length ? ` WHERE ${cond.join(' AND ')}` : ''} ORDER BY ordem ASC, created_at ASC`,
+      params
+    ).map((a) => ({ ...a, ativo: Number(a.ativo) === 1 }))
+  },
+
+  criarAviso({ tipo, titulo, texto, ordem = 0 }) {
+    run('INSERT INTO avisos (id, tipo, titulo, texto, ativo, ordem, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)', [
+      uuid(),
+      tipo,
+      titulo,
+      texto,
+      ordem,
+      new Date().toISOString(),
+    ])
+  },
+
+  atualizarAviso(id, { titulo, texto, ativo }) {
+    if (titulo !== undefined) run('UPDATE avisos SET titulo = ?, texto = ? WHERE id = ?', [titulo, texto, id])
+    if (ativo !== undefined) run('UPDATE avisos SET ativo = ? WHERE id = ?', [ativo ? 1 : 0, id])
+  },
+
+  excluirAviso(id) {
+    run('DELETE FROM avisos WHERE id = ?', [id])
+  },
+
+  // sinal = 'visto' | 'aparelho' | 'ajuda' | null, em vários pedidos de uma vez
+  setSinal(ids, sinal) {
+    run(`UPDATE queue_entries SET sinal = ? WHERE id IN (${ids.map(() => '?').join(',')})`, [sinal, ...ids])
+  },
+
   // ---- chat: admin ----
   getConversas() {
     return all('SELECT * FROM conversas ORDER BY ultima_msg_em DESC')

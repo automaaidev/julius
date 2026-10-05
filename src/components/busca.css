@@ -408,3 +408,66 @@
 
 .busca button:focus-visible,
 .busca-btn:focus-visible { outline: 2px solid var(--luz); outline-offset: 2px; }
+
+/* botão "Dúvidas" ao lado do cardápio */
+.busca-btn--duvidas { flex: 0 0 auto; width: auto; padding-inline: 1.1rem; }
+
+/* dúvidas frequentes (accordion) */
+.duvidas__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+
+.duvidas__item {
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.duvidas__item[open] { border-color: rgba(231, 178, 76, 0.45); }
+
+.duvidas__item summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.8rem 2.4rem 0.8rem 0.9rem;
+  position: relative;
+  font-weight: 600;
+  font-size: 0.93rem;
+  color: var(--pessego);
+  line-height: 1.3;
+}
+
+.duvidas__item summary::-webkit-details-marker { display: none; }
+
+.duvidas__item summary::after {
+  content: '+';
+  position: absolute;
+  right: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  color: var(--luz);
+}
+
+.duvidas__item[open] summary::after { content: '–'; }
+
+.duvidas__item p {
+  margin: 0;
+  padding: 0 0.9rem 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--texto-claro);
+}
+
+/* sinal do operador no pedido ("👀 Visto pela equipe") */
+.sinal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.6rem;
+  border: 1px solid rgba(231, 178, 76, 0.4);
+  border-radius: 999px;
+  background: rgba(231, 178, 76, 0.1);
+  color: var(--luz-suave);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.sinal-chip--ajuda { border-color: #c98a3a; background: rgba(201, 138, 58, 0.18); color: #ffcf8a; }
