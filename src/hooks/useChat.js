@@ -20,11 +20,13 @@ function mapErro(msg) {
 }
 
 // ---- cliente: a própria conversa ----
-export function useChatCliente(perfilId, chave) {
+// `ativo` = a pessoa já tem conversa (já digitou o nome). Antes disso não existe nada pra
+// buscar: o banco recusaria a chamada (400), e no 4G é uma viagem de ida e volta à toa.
+export function useChatCliente(perfilId, chave, { ativo = true } = {}) {
   const [mensagens, setMensagens] = useState([])
   const [loading, setLoading] = useState(true)
 
-  const refetch = useCallback(async () => {
+  const carregar = useCallback(async () => {
     if (LOCAL) {
       setMensagens(localDb.chatMensagens(perfilId))
       setLoading(false)
@@ -42,12 +44,20 @@ export function useChatCliente(perfilId, chave) {
     setLoading(false)
   }, [perfilId, chave])
 
+  const refetch = useCallback(async () => {
+    if (!ativo && !LOCAL) {
+      setLoading(false)
+      return
+    }
+    await carregar()
+  }, [ativo, carregar])
+
   useEffect(() => {
     if (LOCAL) {
       refetch()
       return localDb.subscribe(refetch)
     }
-    if (!supabase) {
+    if (!supabase || !ativo) {
       setLoading(false)
       return
     }
@@ -64,7 +74,7 @@ export function useChatCliente(perfilId, chave) {
       )
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [perfilId, refetch])
+  }, [perfilId, refetch, ativo])
 
   async function iniciar(nome) {
     if (LOCAL) {
@@ -86,7 +96,7 @@ export function useChatCliente(perfilId, chave) {
       p_nome: nome,
     })
     if (error) return { ok: false, erro: mapErro(error.message) }
-    await refetch()
+    await carregar()
     return { ok: true }
   }
 
@@ -106,7 +116,7 @@ export function useChatCliente(perfilId, chave) {
       p_numero: numero,
     })
     if (error) return { ok: false, erro: mapErro(error.message) }
-    await refetch()
+    await carregar()
     return { ok: true }
   }
 
@@ -128,7 +138,7 @@ export function useChatCliente(perfilId, chave) {
       p_entrada: entryId,
     })
     if (error) return { ok: false, erro: mapErro(error.message) }
-    await refetch()
+    await carregar()
     return { ok: true }
   }
 

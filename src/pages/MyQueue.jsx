@@ -60,7 +60,7 @@ export default function MyQueue() {
   const [duvidas, setDuvidas] = useState(false) // folha de dúvidas frequentes aberta
   const { itens: avisosDaCasa } = useAvisos('aviso')
 
-  const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave)
+  const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave, { ativo: !identificando })
 
   const scrollRef = useRef(null)
   const numeroRef = useRef(null)
