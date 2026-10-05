@@ -9,8 +9,7 @@
 // - `run()` grava, persiste o blob e notifica assinantes.
 // - `storage` event sincroniza entre abas.
 
-import initSqlJs from 'sql.js'
-import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
+import { LOCAL } from './flags'
 import { normalizar } from './normalizar'
 import { AVISOS_PADRAO } from './avisosPadrao'
 
@@ -278,8 +277,15 @@ function seedChat() {
 
 // ---- init ----
 
-export const dbReady = (async () => {
+// Só o modo local (teste, sem Supabase) usa este banco. Em produção ele nem sobe — nem
+// baixa: o sql.js e o WASM (~650 KB) são carregados sob demanda aqui dentro, então o
+// celular de quem usa o sistema de verdade no 4G não paga por isso.
+export const dbReady = !LOCAL ? Promise.resolve(false) : (async () => {
   try {
+    const [{ default: initSqlJs }, { default: wasmUrl }] = await Promise.all([
+      import('sql.js'),
+      import('sql.js/dist/sql-wasm.wasm?url'),
+    ])
     SQL = await initSqlJs({ locateFile: () => wasmUrl })
 
     let saved = null
