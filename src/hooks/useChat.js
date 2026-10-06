@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase, realtimeTopic } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
+import { useAoVivo, aoStatus } from './useAoVivo'
 
 const ERROS_CHAT = {
   PERFIL_INVALIDO: 'Não foi possível te identificar. Recarregue a página.',
@@ -25,6 +26,7 @@ function mapErro(msg) {
 export function useChatCliente(perfilId, chave, { ativo = true } = {}) {
   const [mensagens, setMensagens] = useState([])
   const [loading, setLoading] = useState(true)
+  const [rtOk, setRtOk] = useState(false)
 
   const carregar = useCallback(async () => {
     if (LOCAL) {
@@ -36,11 +38,12 @@ export function useChatCliente(perfilId, chave, { ativo = true } = {}) {
       setLoading(false)
       return
     }
-    const { data } = await supabase.rpc('chat_mensagens_cliente', {
+    const { data, error } = await supabase.rpc('chat_mensagens_cliente', {
       p_perfil: perfilId,
       p_chave: chave,
     })
-    setMensagens(data ?? [])
+    // busca falhou (sinal ruim): mantém o que já está na tela em vez de esvaziar o chat
+    if (!error) setMensagens(data ?? [])
     setLoading(false)
   }, [perfilId, chave])
 
@@ -72,9 +75,12 @@ export function useChatCliente(perfilId, chave, { ativo = true } = {}) {
         { event: '*', schema: 'julius', table: 'conversas', filter: `perfil_id=eq.${perfilId}` },
         () => refetch()
       )
-      .subscribe()
+      .subscribe(aoStatus(setRtOk, refetch))
     return () => supabase.removeChannel(channel)
   }, [perfilId, refetch, ativo])
+
+  // rede de segurança do tempo real: ao voltar pro app / a internet voltar / a cada 30 s
+  useAoVivo(refetch, { intervaloMs: 30_000, realtimeOk: rtOk, ativo })
 
   async function iniciar(nome) {
     if (LOCAL) {
@@ -150,6 +156,7 @@ export function useConversas() {
   const [conversas, setConversas] = useState([])
   const [loading, setLoading] = useState(true)
   const [topic] = useState(() => realtimeTopic('conversas-admin'))
+  const [rtOk, setRtOk] = useState(false)
 
   const refetch = useCallback(async () => {
     if (LOCAL) {
@@ -161,11 +168,11 @@ export function useConversas() {
       setLoading(false)
       return
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('conversas')
       .select('*')
       .order('ultima_msg_em', { ascending: false })
-    setConversas(data ?? [])
+    if (!error) setConversas(data ?? [])
     setLoading(false)
   }, [])
 
@@ -183,9 +190,11 @@ export function useConversas() {
       .channel(topic)
       .on('postgres_changes', { event: '*', schema: 'julius', table: 'conversas' }, () => refetch())
       .on('postgres_changes', { event: '*', schema: 'julius', table: 'chat_mensagens' }, () => refetch())
-      .subscribe()
+      .subscribe(aoStatus(setRtOk, refetch))
     return () => supabase.removeChannel(channel)
   }, [refetch, topic])
+
+  useAoVivo(refetch, { intervaloMs: 30_000, realtimeOk: rtOk })
 
   return { conversas, loading, refetch }
 }
@@ -194,6 +203,7 @@ export function useConversas() {
 export function useThread(perfilId) {
   const [mensagens, setMensagens] = useState([])
   const [loading, setLoading] = useState(true)
+  const [rtOk, setRtOk] = useState(false)
 
   const refetch = useCallback(async () => {
     if (!perfilId) return
@@ -206,12 +216,12 @@ export function useThread(perfilId) {
       setLoading(false)
       return
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('chat_mensagens')
       .select('*')
       .eq('perfil_id', perfilId)
       .order('created_at', { ascending: true })
-    setMensagens(data ?? [])
+    if (!error) setMensagens(data ?? [])
     setLoading(false)
   }, [perfilId])
 
@@ -247,9 +257,11 @@ export function useThread(perfilId) {
           }
         }
       )
-      .subscribe()
+      .subscribe(aoStatus(setRtOk, refetch))
     return () => supabase.removeChannel(channel)
   }, [perfilId, refetch])
+
+  useAoVivo(refetch, { intervaloMs: 30_000, realtimeOk: rtOk, ativo: Boolean(perfilId) })
 
   async function enviar(texto) {
     if (LOCAL) return localDb.adminEnviar(perfilId, texto)

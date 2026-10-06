@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase, realtimeTopic } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
+import { useAoVivo, aoStatus } from './useAoVivo'
 
 // Sem .env e sem modo local: site institucional roda sem status ao vivo.
 const MOCK_SETTINGS = {
@@ -21,6 +22,7 @@ export function useSettings() {
   })
   const [loading, setLoading] = useState(LOCAL || Boolean(supabase))
   const [topic] = useState(() => realtimeTopic('settings'))
+  const [rtOk, setRtOk] = useState(false)
 
   const refetch = useCallback(async () => {
     if (LOCAL) {
@@ -29,7 +31,7 @@ export function useSettings() {
     }
     if (!supabase) return
     const { data } = await supabase.from('settings').select('*').eq('id', 1).single()
-    setSettings(data)
+    if (data) setSettings(data) // falha de rede não pode apagar o que já está na tela
   }, [])
 
   useEffect(() => {
@@ -71,13 +73,15 @@ export function useSettings() {
         { event: 'UPDATE', schema: 'julius', table: 'settings', filter: 'id=eq.1' },
         (payload) => setSettings(payload.new)
       )
-      .subscribe()
+      .subscribe(aoStatus(setRtOk, refetch))
 
     return () => {
       active = false
       supabase.removeChannel(channel)
     }
-  }, [topic])
+  }, [topic, refetch])
+
+  useAoVivo(refetch, { intervaloMs: 30_000, realtimeOk: rtOk })
 
   return { settings, loading, refetch }
 }

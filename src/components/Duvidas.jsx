@@ -74,7 +74,7 @@ export default function Duvidas({ onFechar }) {
         <div className="busca__corpo">
           {loading && <p className="busca__status">Carregando…</p>}
 
-          {!loading && erro && (
+          {!loading && erro && itens.length === 0 && (
             <p className="busca__erro" role="alert">
               Não deu pra carregar agora. Tenta de novo em instantes.
             </p>

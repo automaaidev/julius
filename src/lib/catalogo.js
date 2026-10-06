@@ -30,7 +30,7 @@ export const ORDENS = [
 // abrindo o cardápio juntas pedem quase sempre a mesma primeira página). O catálogo
 // quase não muda; quando muda (importação, nome editado no painel) o cache zera.
 const paginas = new Map() // chave -> { em, resultado }
-const VALIDADE_MS = 10 * 60_000
+const VALIDADE_MS = 3 * 60_000 // o dono pode editar uma música: em até 3 min todo mundo vê
 const MAX_PAGINAS = 300
 
 // { itens, total, erro } — nunca lança. Sem `q` (ou com menos de MIN_BUSCA letras)
@@ -68,9 +68,15 @@ export async function buscarMusicas({ q = '', categoria = null, limite = PAGINA,
 
 // ---- título por número (fila, próximas, caderninho) ----
 
-// numero -> { numero, titulo, artista } | null. Cache por sessão (inclui "não
-// achou"); zera quando o catálogo é importado.
+// numero -> { musica: { numero, titulo, artista } | null, em }. Cache de poucos minutos
+// (inclui "não achou"); zera quando o catálogo muda aqui, e expira sozinho pra
+// pegar o que o operador editou em outro aparelho.
 const cache = new Map()
+const VALIDADE_TITULOS_MS = 3 * 60_000
+const noCache = (n) => {
+  const c = cache.get(n)
+  return c && Date.now() - c.em < VALIDADE_TITULOS_MS ? c : undefined
+}
 const ouvintes = new Set()
 
 export function aoMudarCatalogo(cb) {
@@ -88,7 +94,7 @@ export function catalogoMudou() {
 
 // busca no banco o que ainda não está no cache; LANÇA se o banco não responder
 async function carregarNumeros(numeros) {
-  const faltando = numeros.filter((n) => !cache.has(n))
+  const faltando = numeros.filter((n) => !noCache(n))
   if (faltando.length === 0) return
   let rows = []
   if (LOCAL) {
@@ -99,8 +105,9 @@ async function carregarNumeros(numeros) {
     if (error) throw error
     rows = data ?? []
   }
-  for (const n of faltando) cache.set(n, null)
-  for (const r of rows) cache.set(r.numero, r)
+  const em = Date.now()
+  for (const n of faltando) cache.set(n, { musica: null, em })
+  for (const r of rows) cache.set(r.numero, { musica: r, em })
 }
 
 export async function obterMusicas(numeros) {
@@ -110,7 +117,7 @@ export async function obterMusicas(numeros) {
   } catch {
     /* sem catálogo (ou migration pendente): fica só o número, sem cachear */
   }
-  return new Map(unicos.map((n) => [n, cache.get(n) ?? null]))
+  return new Map(unicos.map((n) => [n, noCache(n)?.musica ?? null]))
 }
 
 // O catálogo só serve de conferência se estiver carregado de verdade: com ele vazio
@@ -138,7 +145,7 @@ export async function conferirNumero(numero) {
   if (!n) return { existe: null }
   try {
     await carregarNumeros([n])
-    const musica = cache.get(n)
+    const musica = noCache(n)?.musica
     if (musica) return { existe: true, musica }
     return (await conferenciaDisponivel()) ? { existe: false } : { existe: null }
   } catch {

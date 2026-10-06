@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase, realtimeTopic } from '../lib/supabaseClient'
 import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
+import { useAoVivo, aoStatus } from './useAoVivo'
 
 const COLS_BASE = 'id,nome,perfil_id,numero_musica,status,posicao,created_at'
 // `sinal` veio na migration 20261005_avisos_e_sinais.sql. Enquanto ela não rodou, pedir a
@@ -14,6 +15,7 @@ export function useQueue() {
   const [entries, setEntries] = useState(() => (LOCAL ? localDb.getQueue() : []))
   const [loading, setLoading] = useState(true)
   const [topic] = useState(() => realtimeTopic('queue'))
+  const [rtOk, setRtOk] = useState(false)
 
   const refetch = useCallback(async () => {
     if (LOCAL) {
@@ -31,9 +33,10 @@ export function useQueue() {
     let { data, error } = await buscar(comSinal ? `${COLS_BASE},sinal` : COLS_BASE)
     if (error && comSinal && /sinal/i.test(error.message ?? '')) {
       comSinal = false
-      ;({ data } = await buscar(COLS_BASE))
+      ;({ data, error } = await buscar(COLS_BASE))
     }
-    setEntries(data ?? [])
+    // busca falhou (sinal ruim): mantém a fila que já está na tela em vez de esvaziá-la
+    if (!error && data) setEntries(data)
     setLoading(false)
   }, [])
 
@@ -62,10 +65,12 @@ export function useQueue() {
         { event: '*', schema: 'julius', table: 'queue_entries' },
         () => refetch()
       )
-      .subscribe()
+      .subscribe(aoStatus(setRtOk, refetch))
 
     return () => supabase.removeChannel(channel)
   }, [refetch, topic])
+
+  useAoVivo(refetch, { intervaloMs: 30_000, realtimeOk: rtOk })
 
   return { entries, loading, refetch }
 }
