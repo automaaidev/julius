@@ -6,7 +6,14 @@ export const POSICAO_VISIVEL_ATE = 4
 
 export const mostraPosicao = (rank) => rank <= POSICAO_VISIVEL_ATE
 
-export const AVISO_NA_FILA = 'Sua música já está na fila. Fique por perto — avisamos aqui quando você for o próximo.'
+// Quando um número que alguém já pediu libera pra outra pessoa (settings.repetir_modo):
+// 'livre' | 'ao_terminar' | 'tempo' | 'musicas'. Sem a migration 20261103 a coluna não
+// existe e o intervalo em minutos fazia tudo (0 = desligado).
+export function modoRepetir(settings) {
+  return settings?.repetir_modo ?? ((settings?.intervalo_repetir_min ?? 0) > 0 ? 'tempo' : 'livre')
+}
+
+export const AVISO_NA_FILA ='Sua música já está na fila. Fique por perto — avisamos aqui quando você for o próximo.'
 
 // Texto de uma mensagem do chat "pro cliente": tira o número da posição quando ele não deve
 // aparecer. As mensagens vêm prontas do servidor (chat_pedir_musica) e do modo local.

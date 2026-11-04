@@ -31,9 +31,13 @@ create table if not exists julius.settings (
   ultimo_encerramento date,
   -- quantas músicas cada pessoa pode ter ao mesmo tempo na fila (waiting/playing)
   limite_musicas int not null default 1 check (limite_musicas between 1 and 3),
-  -- minutos até o mesmo número poder voltar pra fila (0 = desligado): barra
-  -- música que já está na fila/no palco ou foi cantada há pouco
+  -- música repetida: um número na fila/no palco não entra de novo até ser
+  -- cantado; depois disso libera conforme o modo ('livre' = sem regra):
+  --   'ao_terminar' na hora | 'tempo' N min depois | 'musicas' depois de mais N músicas
+  repetir_modo text not null default 'tempo'
+    check (repetir_modo in ('livre', 'ao_terminar', 'tempo', 'musicas')),
   intervalo_repetir_min int not null default 30 check (intervalo_repetir_min between 0 and 720),
+  intervalo_repetir_musicas int not null default 5 check (intervalo_repetir_musicas between 1 and 50),
   updated_at timestamptz not null default now()
 );
 
@@ -63,6 +67,8 @@ create table if not exists julius.queue_entries (
 create index if not exists idx_queue_status on julius.queue_entries (status);
 create index if not exists idx_queue_posicao on julius.queue_entries (posicao);
 create index if not exists idx_queue_perfil on julius.queue_entries (perfil_id);
+-- repetir_modo 'musicas' conta o que foi cantado depois de um horário
+create index if not exists idx_queue_cantada on julius.queue_entries (cantada_em) where status = 'done';
 
 -- só 1 música no palco por vez: índice único parcial trava um 2º UPDATE
 -- concorrente que tente marcar outra entrada como 'playing'.
@@ -294,7 +300,8 @@ grant execute on function julius.esta_aberto() to anon, authenticated;
 --
 -- Regras:
 --   1. casa tem que estar aberta (julius.esta_aberto())
---   2. no máx. 1 música ativa (waiting/playing) por perfil_id
+--   2. no máx. `limite_musicas` ativas (waiting/playing) por perfil_id
+--   3. música repetida: ver settings.repetir_modo
 -- ============================================================
 create or replace function julius._entrar_fila(
   p_nome text,
@@ -307,12 +314,16 @@ set search_path = julius
 as $$
 declare
   v_limite int;
+  v_modo text;
   v_intervalo int;
+  v_musicas int;
   v_count_pessoa int;
   v_tail_posicao int;
   v_nova_posicao int;
   v_existente julius.queue_entries;
   v_min int;
+  v_cantada_em timestamptz;
+  v_depois int;
   v_row julius.queue_entries;
 begin
   if coalesce(btrim(p_nome), '') = '' then
@@ -331,11 +342,13 @@ begin
     raise exception 'CASA_FECHADA' using errcode = 'P0001';
   end if;
 
-  select coalesce(limite_musicas, 1), coalesce(intervalo_repetir_min, 0)
-    into v_limite, v_intervalo
+  select limite_musicas, repetir_modo, intervalo_repetir_min, intervalo_repetir_musicas
+    into v_limite, v_modo, v_intervalo, v_musicas
   from julius.settings where id = 1;
   v_limite := coalesce(v_limite, 1);
+  v_modo := coalesce(v_modo, 'livre');
   v_intervalo := coalesce(v_intervalo, 0);
+  v_musicas := coalesce(v_musicas, 5);
 
   if exists (
     select 1 from julius.queue_entries
@@ -346,8 +359,9 @@ begin
     raise exception 'MUSICA_REPETIDA' using errcode = 'P0001';
   end if;
 
-  -- intervalo pra repetir (o operador, via admin_adicionar_fila, ignora)
-  if v_intervalo > 0 and coalesce(current_setting('julius.ignorar_repeticao', true), '') <> 'on' then
+  -- música repetida (o operador, via admin_adicionar_fila, ignora)
+  if v_modo <> 'livre' and coalesce(current_setting('julius.ignorar_repeticao', true), '') <> 'on' then
+    -- na fila ou no palco: espera ser cantada
     select * into v_existente
     from julius.queue_entries
     where numero_musica = p_numero_musica and status in ('waiting', 'playing')
@@ -365,20 +379,42 @@ begin
       end;
     end if;
 
-    -- quanto falta (em min) pra liberar, se foi cantada dentro do intervalo
-    select ceil(extract(epoch from (
-             coalesce(cantada_em, created_at) + make_interval(mins => v_intervalo) - now()
-           )) / 60)::int
-      into v_min
-    from julius.queue_entries
-    where numero_musica = p_numero_musica
-      and status = 'done'
-      and coalesce(cantada_em, created_at) > now() - make_interval(mins => v_intervalo)
-    order by coalesce(cantada_em, created_at) desc
-    limit 1;
+    -- já cantada: 'ao_terminar' libera na hora; 'tempo' e 'musicas' esperam mais
+    if v_modo = 'tempo' and v_intervalo > 0 then
+      -- quanto falta (em min) pra liberar, se foi cantada dentro do intervalo
+      select ceil(extract(epoch from (
+               coalesce(cantada_em, created_at) + make_interval(mins => v_intervalo) - now()
+             )) / 60)::int
+        into v_min
+      from julius.queue_entries
+      where numero_musica = p_numero_musica
+        and status = 'done'
+        and coalesce(cantada_em, created_at) > now() - make_interval(mins => v_intervalo)
+      order by coalesce(cantada_em, created_at) desc
+      limit 1;
 
-    if v_min is not null then
-      raise exception 'MUSICA_RECENTE' using errcode = 'P0001', detail = greatest(v_min, 1)::text;
+      if v_min is not null then
+        raise exception 'MUSICA_RECENTE' using errcode = 'P0001', detail = greatest(v_min, 1)::text;
+      end if;
+    elsif v_modo = 'musicas' then
+      -- última vez que foi cantada nesta noite (12 h pra trás: o que sobrou do
+      -- fim da noite de ontem não segura a música hoje)
+      select max(cantada_em) into v_cantada_em
+      from julius.queue_entries
+      where numero_musica = p_numero_musica
+        and status = 'done'
+        and cantada_em > now() - interval '12 hours';
+
+      if v_cantada_em is not null then
+        select count(*) into v_depois
+        from julius.queue_entries
+        where status = 'done' and cantada_em > v_cantada_em;
+
+        if v_depois < v_musicas then
+          -- detail: quantas músicas ainda faltam
+          raise exception 'MUSICA_RECENTE_MUSICAS' using errcode = 'P0001', detail = (v_musicas - v_depois)::text;
+        end if;
+      end if;
     end if;
   end if;
 
@@ -575,6 +611,11 @@ begin
             end
           when 'MUSICA_RECENTE' then
             'Essa música acabou de ser cantada. Dá pra pedir de novo em uns ' || coalesce(v_detalhe, '?') || ' min — ou escolhe outra.'
+          when 'MUSICA_RECENTE_MUSICAS' then
+            case when v_detalhe = '1'
+              then 'Essa música acabou de ser cantada. Dá pra pedir de novo depois da próxima música — ou escolhe outra.'
+              else 'Essa música acabou de ser cantada. Dá pra pedir de novo depois de mais ' || coalesce(v_detalhe, '?') || ' músicas — ou escolhe outra.'
+            end
           when 'LIMITE_MUSICAS' then
             case when v_limite = 1
               then 'Você já tem 1 música na fila. Espera ela terminar pra pedir outra.'

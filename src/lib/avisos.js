@@ -18,6 +18,11 @@ export const MSG = {
       ? 'Essa música está no palco agora. Escolhe outra.'
       : `Essa música já está na fila (posição ${posicao}). Escolhe outra ou espera ela tocar.`,
   musicaRecente: (min) => `Essa música acabou de ser cantada. Dá pra pedir de novo em uns ${min} min — ou escolhe outra.`,
+  // faltam = quantas músicas ainda têm que ser cantadas (string, vem do detail do erro)
+  musicaRecenteMusicas: (faltam) =>
+    faltam === '1'
+      ? 'Essa música acabou de ser cantada. Dá pra pedir de novo depois da próxima música — ou escolhe outra.'
+      : `Essa música acabou de ser cantada. Dá pra pedir de novo depois de mais ${faltam} músicas — ou escolhe outra.`,
   canceladaPelaPessoa: (numero) => `Nº ${numero} saiu da fila. Manda o número certo quando quiser 🎶`,
   encerramento: 'Valeu por cantar com a gente! A fila encerrou à meia-noite. Até a próxima 🎤',
   erroGenerico: 'Não deu pra entrar na fila agora. Tenta de novo.',

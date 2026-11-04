@@ -287,6 +287,20 @@
   .adm-modos { grid-template-columns: 1fr; }
 }
 
+/* opções curtas (30 min, 5 músicas...): lado a lado, quebram linha só se não couber */
+.adm-modos.adm-modos--linha { display: flex; flex-wrap: wrap; }
+.adm-modos--linha .adm-modo { min-width: 4.8rem; padding-inline: 0.7rem; }
+
+/* título de um grupo de opções, colado nos botões logo abaixo */
+.adm-modos__rotulo + .adm-modos { margin-top: 0; }
+
+.adm-modos__rotulo {
+  margin: 0.2rem 0 -0.3rem;
+  font-size: 0.72rem;
+  color: var(--pessego-escuro);
+  opacity: 0.85;
+}
+
 /* ---- descrição curta abaixo do título de cada card ---- */
 .adm-modo__desc {
   margin: -0.4rem 0 0.9rem;

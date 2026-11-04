@@ -8,7 +8,8 @@ React (Vite) + Supabase. Fila e chat em tempo real via Supabase Realtime.
 2. No SQL Editor do projeto, rode `supabase/schema.sql` inteiro (instalação do zero).
    - Se o banco já existe numa versão anterior, rode as migrations que faltam
      em `supabase/migrations/`, em ordem (a mais nova é
-     `20261005_avisos_e_sinais.sql`; antes dela `20261004_catalogo_musicas.sql`
+     `20261103_liberar_musica_repetida.sql`; antes dela
+     `20261005_avisos_e_sinais.sql`, `20261004_catalogo_musicas.sql`
      — catálogo e cardápio — e `20261003_intervalo_repetir_musica.sql`, depois da
      `20261002_pedidos_do_cliente.sql`: encerramento à meia-noite, limite de
      músicas por pessoa, cancelar música, incluir sem celular, sugestões).
@@ -65,13 +66,17 @@ Não é WhatsApp — é uma conversa por cliente (`julius.conversas` +
 - **Músicas por pessoa** (`settings.limite_musicas`, 1 a 3, padrão 1; muda na
   aba Casa) — quem estiver no limite espera uma terminar. A mesma música não
   entra duas vezes pra mesma pessoa.
-- **Intervalo pra repetir música** (`settings.intervalo_repetir_min`, em
-  minutos, padrão 30, 0 desliga; o admin escolhe na aba Casa): com ele ligado,
-  o mesmo número não entra na fila se já está na fila/no palco (de qualquer
-  pessoa) nem se foi cantado há menos de N minutos (`queue_entries.cantada_em`,
-  carimbado por trigger ao virar `done`). O operador (`admin_adicionar_fila`)
-  ignora a regra — é ele quem decide, por exemplo, um dueto. Migration:
-  `20261003_intervalo_repetir_musica.sql`.
+- **Música repetida** (`settings.repetir_modo`; o admin escolhe na aba Casa):
+  se o João pediu um número, ninguém mais pede o mesmo enquanto ele está na
+  fila ou no palco. Depois de cantado (`queue_entries.cantada_em`, carimbado
+  por trigger ao virar `done`) ele libera conforme o modo:
+  `ao_terminar` na hora; `tempo` depois de `intervalo_repetir_min` minutos
+  (padrão 30); `musicas` depois de mais `intervalo_repetir_musicas` músicas
+  cantadas (só conta o que foi cantado nas últimas 12 h, pra sobra da noite
+  anterior não segurar a música); `livre` desliga a regra. O operador
+  (`admin_adicionar_fila`) ignora a regra — é ele quem decide, por exemplo,
+  um dueto. Migrations: `20261003_intervalo_repetir_musica.sql` +
+  `20261103_liberar_musica_repetida.sql`.
 - **Cancelar a própria música** (`chat_cancelar_musica`): só enquanto espera;
   vira `status = 'cancelled'` e a pessoa manda o número certo — entra de novo
   no fim da fila.

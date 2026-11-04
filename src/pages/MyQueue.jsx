@@ -33,7 +33,7 @@ import BuscaMusicas, { BotaoCardapio } from '../components/BuscaMusicas'
 import Duvidas, { BotaoDuvidas } from '../components/Duvidas'
 import SinalChip from '../components/SinalChip'
 import { useAvisos } from '../hooks/useAvisos'
-import { mostraPosicao, textoParaCliente } from '../lib/fila'
+import { mostraPosicao, textoParaCliente, modoRepetir } from '../lib/fila'
 import Caderninho from './Caderninho'
 import './queue.css'
 import './chat.css'
@@ -105,12 +105,12 @@ export default function MyQueue() {
           : `Você já tem ${limite} músicas na fila.`
         : null
 
-  // sugestões: tira o que a pessoa já tem na fila, o que já cantou e — com o
-  // intervalo pra repetir ligado — o que qualquer um já tem na fila (o
+  // sugestões: tira o que a pessoa já tem na fila, o que já cantou e — com a
+  // regra de música repetida ligada — o que qualquer um já tem na fila (o
   // servidor barraria de qualquer jeito)
   const minhasNumeros = new Set(minhas.map((e) => e.numero_musica))
   const naFilaNumeros = new Set(ranked.map((e) => e.numero_musica))
-  const bloqueiaRepetida = (settings?.intervalo_repetir_min ?? 0) > 0
+  const bloqueiaRepetida = modoRepetir(settings) !== 'livre'
   const dicas = sugestoes
     .filter(
       (s) =>

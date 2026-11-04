@@ -5,6 +5,7 @@ import { LOCAL } from '../lib/flags'
 import { localDb } from '../lib/localDb'
 import AcaoPerigosa from './AcaoPerigosa'
 import { mapErroAdmin } from './erros'
+import { modoRepetir } from '../lib/fila'
 
 const DIAS = [
   ['seg', 'segunda'], ['ter', 'terça'], ['qua', 'quarta'], ['qui', 'quinta'],
@@ -70,13 +71,24 @@ async function salvarSettings(patch) {
   }
 }
 
-// encerramento à meia-noite + quantas músicas cada pessoa pode ter na fila
+// encerramento à meia-noite + quantas músicas cada pessoa pode ter na fila + música repetida
 function RegrasFila({ settings, onChanged }) {
   const encerra = settings.encerramento_automatico === true
   const limite = settings.limite_musicas ?? 1
   const intervalo = settings.intervalo_repetir_min ?? 0
+  const musicas = settings.intervalo_repetir_musicas ?? 5
+  // 'tempo' com 0 min (só mexendo por SQL) é o mesmo que liberar assim que cantar
+  const modoSalvo = modoRepetir(settings)
+  const modo = modoSalvo === 'tempo' && intervalo === 0 ? 'ao_terminar' : modoSalvo
   // atalhos comuns; se o banco tiver outro valor (ex: mexido por SQL) ele aparece também
-  const opcoesIntervalo = [...new Set([0, 15, 30, 60, 120, intervalo])].sort((a, b) => a - b)
+  const opcoesTempo = [...new Set([15, 30, 60, 120, intervalo])].filter((n) => n > 0).sort((a, b) => a - b)
+  const opcoesMusicas = [...new Set([3, 5, 10, musicas])].sort((a, b) => a - b)
+  const dicaRepetida = {
+    livre: 'Desligado: qualquer pessoa pode pedir um número que já está na fila ou no palco.',
+    ao_terminar: 'Ligado: o número fica bloqueado enquanto está na fila ou no palco e libera assim que é cantado.',
+    tempo: `Ligado: o número fica bloqueado enquanto está na fila ou no palco e só volta ${rotuloIntervalo(intervalo, true)} depois de cantado.`,
+    musicas: `Ligado: o número fica bloqueado enquanto está na fila ou no palco e só volta depois de mais ${rotuloMusicas(musicas)} cantadas.`,
+  }[modo]
   const [erro, setErro] = useState('')
 
   async function aplicar(patch) {
@@ -85,6 +97,18 @@ function RegrasFila({ settings, onChanged }) {
     if (!r.ok) setErro(r.erro)
     onChanged?.()
   }
+
+  // botão de uma opção da música repetida; não grava de novo o que já está escolhido
+  const opcao = (on, patch, rotulo) => (
+    <button
+      key={rotulo}
+      type="button"
+      className={`adm-modo ${on ? 'adm-modo--on' : ''}`}
+      onClick={() => !on && aplicar(patch)}
+    >
+      {rotulo}
+    </button>
+  )
 
   return (
     <>
@@ -127,28 +151,34 @@ function RegrasFila({ settings, onChanged }) {
 
       <div className="adm-regra adm-regra--col">
         <span className="adm-regra__txt">
-          <b><Timer size={13} /> Intervalo pra repetir música</b>
+          <b><Timer size={13} /> Música repetida</b>
           <span>
-            Barra o mesmo número de entrar na fila enquanto ele já está na fila ou no palco, e por esse
-            tempo depois de cantado. O operador pode incluir mesmo assim (ex: dueto).
+            Se alguém já pediu um número, outra pessoa só pede o mesmo depois que ele for cantado. Escolhe
+            quando ele libera. O operador pode incluir mesmo assim (ex: dueto).
           </span>
         </span>
-        <div className="adm-modos">
-          {opcoesIntervalo.map((n) => (
-            <button
-              key={n}
-              type="button"
-              className={`adm-modo ${intervalo === n ? 'adm-modo--on' : ''}`}
-              onClick={() => intervalo !== n && aplicar({ intervalo_repetir_min: n })}
-            >
-              {rotuloIntervalo(n)}
-            </button>
-          ))}
+        <div className="adm-modos adm-modos--linha">
+          {opcao(modo === 'ao_terminar', { repetir_modo: 'ao_terminar' }, 'Assim que cantar')}
+          {opcao(modo === 'livre', { repetir_modo: 'livre' }, 'Desligado')}
+        </div>
+        <span className="adm-modos__rotulo">Ou depois de um tempo</span>
+        <div className="adm-modos adm-modos--linha">
+          {opcoesTempo.map((n) =>
+            opcao(modo === 'tempo' && intervalo === n, { repetir_modo: 'tempo', intervalo_repetir_min: n }, rotuloIntervalo(n))
+          )}
+        </div>
+        <span className="adm-modos__rotulo">Ou depois de mais músicas cantadas</span>
+        <div className="adm-modos adm-modos--linha">
+          {opcoesMusicas.map((n) =>
+            opcao(
+              modo === 'musicas' && musicas === n,
+              { repetir_modo: 'musicas', intervalo_repetir_musicas: n },
+              rotuloMusicas(n)
+            )
+          )}
         </div>
         <p className="adm-modo__hint" style={{ marginTop: 0 }}>
-          {intervalo === 0
-            ? 'Desligado: qualquer pessoa pode pedir um número que já está na fila ou acabou de ser cantado.'
-            : `Ligado: um número só volta ${rotuloIntervalo(intervalo, true)} depois de cantado, e nunca entra duas vezes ao mesmo tempo.`}
+          {dicaRepetida}
         </p>
       </div>
 
@@ -161,9 +191,10 @@ function RegrasFila({ settings, onChanged }) {
   )
 }
 
-// 0 -> "Desligado" | 15 -> "15 min" | 60 -> "1 h" ; `frase` = forma pra usar no meio do texto
+const rotuloMusicas = (n) => `${n} ${n === 1 ? 'música' : 'músicas'}`
+
+// 15 -> "15 min" | 60 -> "1 h" ; `frase` = forma pra usar no meio do texto
 function rotuloIntervalo(min, frase = false) {
-  if (min === 0) return 'Desligado'
   if (min < 60 || min % 60 !== 0) return frase ? `${min} minutos` : `${min} min`
   const h = min / 60
   return frase ? `${h} ${h === 1 ? 'hora' : 'horas'}` : `${h} h`

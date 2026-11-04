@@ -3,6 +3,7 @@
 const MIGRATION = 'Falta rodar a migration 20261002_pedidos_do_cliente.sql no SQL Editor do Supabase.'
 const MIGRATION_AVISOS = 'Falta rodar a migration 20261005_avisos_e_sinais.sql no SQL Editor do Supabase.'
 const MIGRATION_CATALOGO = 'Falta rodar a migration 20261004_catalogo_musicas.sql no SQL Editor do Supabase.'
+const MIGRATION_REPETIR = 'Falta rodar a migration 20261103_liberar_musica_repetida.sql no SQL Editor do Supabase.'
 
 const MAPA = {
   NOME_INVALIDO: 'Coloca um nome de 1 a 24 letras.',
@@ -22,6 +23,7 @@ export function mapErroAdmin(msg) {
   if (!msg) return 'Não deu certo. Tenta de novo.'
   if (MAPA[msg]) return MAPA[msg]
   if (/could not find the function|schema cache|column .* does not exist|relation .* does not exist/i.test(msg)) {
+    if (/repetir_modo|intervalo_repetir_musicas/i.test(msg)) return MIGRATION_REPETIR
     if (/avisos|sinal/i.test(msg)) return MIGRATION_AVISOS
     return /musicas|destaque|artista|categoria|buscar_musicas/i.test(msg) ? MIGRATION_CATALOGO : MIGRATION
   }

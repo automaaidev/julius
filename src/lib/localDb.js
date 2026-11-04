@@ -29,6 +29,8 @@ function parseSettings(row) {
       limite_musicas: 1,
       ultimo_encerramento: null,
       intervalo_repetir_min: 30,
+      repetir_modo: 'tempo',
+      intervalo_repetir_musicas: 5,
     }
   }
   let horario = DEFAULT_HORARIO
@@ -45,6 +47,8 @@ function parseSettings(row) {
     limite_musicas: Number(row.limite_musicas) || 1,
     ultimo_encerramento: row.ultimo_encerramento || null,
     intervalo_repetir_min: Number.isFinite(Number(row.intervalo_repetir_min)) ? Number(row.intervalo_repetir_min) : 30,
+    repetir_modo: row.repetir_modo || 'tempo',
+    intervalo_repetir_musicas: Number(row.intervalo_repetir_musicas) || 5,
   }
 }
 
@@ -74,15 +78,18 @@ export const localDb = {
     const next = { ...this.getSettings(), ...patch }
     run(
       `INSERT INTO settings
-         (id, abertura_modo, horario_funcionamento, encerramento_automatico, limite_musicas, ultimo_encerramento, intervalo_repetir_min)
-         VALUES (1, ?, ?, ?, ?, ?, ?)
+         (id, abertura_modo, horario_funcionamento, encerramento_automatico, limite_musicas, ultimo_encerramento,
+          intervalo_repetir_min, repetir_modo, intervalo_repetir_musicas)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          abertura_modo = excluded.abertura_modo,
          horario_funcionamento = excluded.horario_funcionamento,
          encerramento_automatico = excluded.encerramento_automatico,
          limite_musicas = excluded.limite_musicas,
          ultimo_encerramento = excluded.ultimo_encerramento,
-         intervalo_repetir_min = excluded.intervalo_repetir_min`,
+         intervalo_repetir_min = excluded.intervalo_repetir_min,
+         repetir_modo = excluded.repetir_modo,
+         intervalo_repetir_musicas = excluded.intervalo_repetir_musicas`,
       [
         next.abertura_modo,
         JSON.stringify(next.horario_funcionamento),
@@ -90,6 +97,8 @@ export const localDb = {
         next.limite_musicas,
         next.ultimo_encerramento,
         next.intervalo_repetir_min,
+        next.repetir_modo,
+        next.intervalo_repetir_musicas,
       ]
     )
   },
@@ -101,8 +110,8 @@ export const localDb = {
 
   // mesma lógica da função julius._entrar_fila (Postgres): ordem de chegada
   // (posição = fim da fila), até `limite_musicas` ativas por perfil_id, sem
-  // repetir o mesmo número e respeitando o intervalo pra repetir música
-  // (`ignorarRepeticao`: o operador passa por cima, como no Postgres).
+  // repetir o mesmo número e respeitando quando a música repetida libera
+  // (`repetir_modo`; `ignorarRepeticao`: o operador passa por cima, como no Postgres).
   _entrarFila({ nome, perfil, numero, ignorarRepeticao = false }) {
     const n = String(nome || '').trim()
     const p = String(perfil || '').trim()
@@ -117,8 +126,8 @@ export const localDb = {
       throw new Error('MUSICA_REPETIDA')
     }
 
-    const intervalo = settings.intervalo_repetir_min
-    if (intervalo > 0 && !ignorarRepeticao) {
+    const modo = settings.repetir_modo
+    if (modo !== 'livre' && !ignorarRepeticao) {
       const num = String(numero).trim()
       const naFila = list.find((e) => e.numero_musica === num)
       if (naFila) {
@@ -127,18 +136,38 @@ export const localDb = {
           naFila.status === 'playing' ? '0' : String(list.filter((e) => e.posicao < naFila.posicao).length + 1)
         throw err
       }
-      const janelaMs = intervalo * 60_000
-      const cantadaHa = all(
-        "SELECT cantada_em, created_at FROM queue_entries WHERE numero_musica = ? AND status = 'done'",
-        [num]
-      )
-        .map((e) => new Date(e.cantada_em || e.created_at).getTime())
-        .filter((t) => t > Date.now() - janelaMs)
-        .sort((a, b) => b - a)[0]
-      if (cantadaHa) {
-        const err = new Error('MUSICA_RECENTE')
-        err.detalhe = String(Math.max(1, Math.ceil((cantadaHa + janelaMs - Date.now()) / 60_000)))
-        throw err
+      const intervalo = settings.intervalo_repetir_min
+      if (modo === 'tempo' && intervalo > 0) {
+        const janelaMs = intervalo * 60_000
+        const cantadaHa = all(
+          "SELECT cantada_em, created_at FROM queue_entries WHERE numero_musica = ? AND status = 'done'",
+          [num]
+        )
+          .map((e) => new Date(e.cantada_em || e.created_at).getTime())
+          .filter((t) => t > Date.now() - janelaMs)
+          .sort((a, b) => b - a)[0]
+        if (cantadaHa) {
+          const err = new Error('MUSICA_RECENTE')
+          err.detalhe = String(Math.max(1, Math.ceil((cantadaHa + janelaMs - Date.now()) / 60_000)))
+          throw err
+        }
+      } else if (modo === 'musicas') {
+        // cantada_em é ISO em UTC: comparar como texto = comparar as datas
+        const desde = new Date(Date.now() - 12 * 3_600_000).toISOString()
+        const ultima = one(
+          "SELECT MAX(cantada_em) AS em FROM queue_entries WHERE numero_musica = ? AND status = 'done' AND cantada_em > ?",
+          [num, desde]
+        )?.em
+        if (ultima) {
+          const depois = Number(
+            one("SELECT COUNT(*) AS n FROM queue_entries WHERE status = 'done' AND cantada_em > ?", [ultima])?.n
+          )
+          if (depois < settings.intervalo_repetir_musicas) {
+            const err = new Error('MUSICA_RECENTE_MUSICAS')
+            err.detalhe = String(settings.intervalo_repetir_musicas - depois)
+            throw err
+          }
+        }
       }
     }
 
@@ -249,9 +278,11 @@ export const localDb = {
               ? MSG.musicaNaFila(e.detalhe)
               : e.message === 'MUSICA_RECENTE'
                 ? MSG.musicaRecente(e.detalhe)
-                : e.message === 'LIMITE_MUSICAS'
-                  ? MSG.limiteMusicas(this.getSettings().limite_musicas)
-                  : MSG.erroGenerico
+                : e.message === 'MUSICA_RECENTE_MUSICAS'
+                  ? MSG.musicaRecenteMusicas(e.detalhe)
+                  : e.message === 'LIMITE_MUSICAS'
+                    ? MSG.limiteMusicas(this.getSettings().limite_musicas)
+                    : MSG.erroGenerico
       this._addMensagem(p, 'sistema', texto)
     }
   },
@@ -288,7 +319,11 @@ export const localDb = {
     const inicioIso = inicio.toISOString()
     const inicioOntemIso = new Date(inicio.getTime() - 86_400_000).toISOString()
 
-    run("UPDATE queue_entries SET status = 'done' WHERE status = 'playing' AND created_at < ?", [inicioIso])
+    // cantada_em: no Postgres quem carimba é o trigger de status
+    run("UPDATE queue_entries SET status = 'done', cantada_em = ? WHERE status = 'playing' AND created_at < ?", [
+      agora.toISOString(),
+      inicioIso,
+    ])
     const fechadas = all(
       "SELECT id FROM queue_entries WHERE status = 'waiting' AND created_at < ?",
       [inicioIso]

@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS settings (
   encerramento_automatico INTEGER NOT NULL DEFAULT 1,
   limite_musicas INTEGER NOT NULL DEFAULT 1,
   ultimo_encerramento TEXT,
-  intervalo_repetir_min INTEGER NOT NULL DEFAULT 30
+  intervalo_repetir_min INTEGER NOT NULL DEFAULT 30,
+  repetir_modo TEXT NOT NULL DEFAULT 'tempo',
+  intervalo_repetir_musicas INTEGER NOT NULL DEFAULT 5
 );
 CREATE TABLE IF NOT EXISTS queue_entries (
   id            TEXT PRIMARY KEY,
@@ -92,6 +94,8 @@ const COLUNAS_NOVAS = [
   ['settings', 'limite_musicas', 'INTEGER NOT NULL DEFAULT 1'],
   ['settings', 'ultimo_encerramento', 'TEXT'],
   ['settings', 'intervalo_repetir_min', 'INTEGER NOT NULL DEFAULT 30'],
+  ['settings', 'repetir_modo', "TEXT NOT NULL DEFAULT 'tempo'"],
+  ['settings', 'intervalo_repetir_musicas', 'INTEGER NOT NULL DEFAULT 5'],
   ['queue_entries', 'cantada_em', 'TEXT'],
   ['queue_entries', 'sinal', 'TEXT'],
   ['musicas', 'artista', 'TEXT'],
@@ -107,6 +111,8 @@ function migrar() {
     db.run(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${ddl}`)
     // o que já estava cadastrado eram as sugestões do painel (mesma regra do Postgres)
     if (coluna === 'destaque') db.run('UPDATE musicas SET destaque = 1')
+    // intervalo 0 desligava a regra inteira (mesma regra do Postgres)
+    if (coluna === 'repetir_modo') db.run("UPDATE settings SET repetir_modo = 'livre' WHERE intervalo_repetir_min = 0")
     if (coluna === 'busca') {
       for (const m of all('SELECT numero, titulo, artista FROM musicas')) {
         db.run('UPDATE musicas SET busca = ? WHERE numero = ?', [normalizar(`${m.titulo} ${m.artista ?? ''}`), m.numero])
