@@ -559,7 +559,9 @@ declare
   v_resposta julius.chat_mensagens;
 begin
   select * into v_conv from julius.conversas where perfil_id = p_perfil;
-  if v_conv.perfil_id is null or v_conv.chave <> p_chave then
+  -- is distinct from: com `<>`, p_chave nulo dava null e o if deixava passar
+  -- (qualquer um agia pelo perfil de outro, que a anon key enxerga na fila)
+  if v_conv.perfil_id is null or v_conv.chave is distinct from p_chave then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
   end if;
 
@@ -709,7 +711,9 @@ declare
   v_resposta julius.chat_mensagens;
 begin
   select * into v_conv from julius.conversas where perfil_id = p_perfil;
-  if v_conv.perfil_id is null or v_conv.chave <> p_chave then
+  -- is distinct from: com `<>`, p_chave nulo dava null e o if deixava passar
+  -- (qualquer um agia pelo perfil de outro, que a anon key enxerga na fila)
+  if v_conv.perfil_id is null or v_conv.chave is distinct from p_chave then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
   end if;
 

@@ -16,6 +16,10 @@
 -- Continuam iguais: "a mesma pessoa não repete o mesmo número" (MUSICA_REPETIDA)
 -- e o operador passando por cima da regra (admin_adicionar_fila, ex: dueto).
 --
+-- Segurança, de carona: chat_pedir_musica e chat_cancelar_musica aceitavam chave
+-- null (`chave <> null` dá null e o if deixava passar), então qualquer um pedia ou
+-- cancelava música em nome de outro perfil. Agora conferem com `is distinct from`.
+--
 -- Rode este arquivo inteiro no SQL Editor do Supabase, depois de
 -- 20261003_intervalo_repetir_musica.sql. Pode rodar de novo: é idempotente.
 
@@ -191,7 +195,7 @@ $$;
 
 revoke execute on function julius._entrar_fila(text, text, text) from public, anon, authenticated;
 
--- 3. chat_pedir_musica: mensagem do modo 'musicas' ----------------------------------
+-- 3. chat_pedir_musica: mensagem do modo 'musicas' + chave conferida sem brecha pra null
 create or replace function julius.chat_pedir_musica(
   p_perfil text,
   p_chave text,
@@ -212,7 +216,9 @@ declare
   v_resposta julius.chat_mensagens;
 begin
   select * into v_conv from julius.conversas where perfil_id = p_perfil;
-  if v_conv.perfil_id is null or v_conv.chave <> p_chave then
+  -- is distinct from: com `<>`, p_chave nulo dava null e o if deixava passar
+  -- (qualquer um agia pelo perfil de outro, que a anon key enxerga na fila)
+  if v_conv.perfil_id is null or v_conv.chave is distinct from p_chave then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
   end if;
 
@@ -285,3 +291,50 @@ end;
 $$;
 
 grant execute on function julius.chat_pedir_musica(text, text, text) to anon;
+
+-- 4. chat_cancelar_musica: chave conferida sem brecha pra null -----------------------
+-- (antes: chave null passava e qualquer um tirava da fila a música de outra pessoa)
+create or replace function julius.chat_cancelar_musica(
+  p_perfil text,
+  p_chave text,
+  p_entrada uuid
+) returns julius.chat_mensagens
+language plpgsql
+security definer
+set search_path = julius
+as $$
+declare
+  v_conv julius.conversas;
+  v_entrada julius.queue_entries;
+  v_resposta julius.chat_mensagens;
+begin
+  select * into v_conv from julius.conversas where perfil_id = p_perfil;
+  -- is distinct from: com `<>`, p_chave nulo dava null e o if deixava passar
+  -- (qualquer um agia pelo perfil de outro, que a anon key enxerga na fila)
+  if v_conv.perfil_id is null or v_conv.chave is distinct from p_chave then
+    raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
+  end if;
+
+  select * into v_entrada
+  from julius.queue_entries
+  where id = p_entrada and perfil_id = p_perfil
+  for update;
+
+  if v_entrada.id is null then
+    raise exception 'ENTRADA_NAO_ENCONTRADA' using errcode = 'P0001';
+  end if;
+  if v_entrada.status <> 'waiting' then
+    raise exception 'NAO_PODE_CANCELAR' using errcode = 'P0001';
+  end if;
+
+  update julius.queue_entries set status = 'cancelled' where id = v_entrada.id;
+
+  insert into julius.chat_mensagens (perfil_id, autor, texto)
+  values (p_perfil, 'sistema', 'Nº ' || v_entrada.numero_musica || ' saiu da fila. Manda o número certo quando quiser 🎶')
+  returning * into v_resposta;
+
+  return v_resposta;
+end;
+$$;
+
+grant execute on function julius.chat_cancelar_musica(text, text, uuid) to anon;
