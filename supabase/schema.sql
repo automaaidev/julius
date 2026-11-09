@@ -476,8 +476,6 @@ as $$
 declare
   v_nome text := btrim(coalesce(p_nome, ''));
   v_existing julius.conversas;
-  v_ola_antigo text;
-  v_ola_velho text;
   v_ola_novo text;
 begin
   perform julius._limpar_conversas_antigas();
@@ -500,22 +498,32 @@ begin
     values (p_perfil, 'sistema', v_ola_novo);
   elsif v_existing.chave <> p_chave then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
-  elsif v_existing.nome <> v_nome then
-    -- "will, envie..." vira "Will Souza, envie...": a saudação acompanha o nome novo
-    -- (a de antes de 2026-11-09, "Oi, will! Manda...", também)
-    v_ola_antigo := v_existing.nome || ', envie a numeração de sua canção no campo abaixo!';
-    v_ola_velho := 'Oi, ' || v_existing.nome || '! Manda o número da música que você quer cantar 🎤';
-
+  else
+    -- a saudação sempre acompanha o nome atual: nome trocado, sobrenome
+    -- completado ou a saudação de antes de 2026-11-09 ("Oi, will! Manda...")
+    -- que ainda estiver na conversa. Já certa, não mexe em nada (nem dispara
+    -- o tempo real do painel).
     update julius.chat_mensagens
        set texto = v_ola_novo
      where perfil_id = p_perfil
        and autor = 'sistema'
-       and texto in (v_ola_antigo, v_ola_velho);
+       and texto <> v_ola_novo
+       and (texto like '%, envie a numeração de sua canção no campo abaixo!'
+            or texto like 'Oi, %! Manda o número da música que você quer cantar 🎤');
 
     update julius.conversas
        set nome = v_nome,
-           ultima_msg_texto = case when ultima_msg_texto in (v_ola_antigo, v_ola_velho) then v_ola_novo else ultima_msg_texto end
-     where perfil_id = p_perfil;
+           ultima_msg_texto = case
+             when ultima_msg_texto like '%, envie a numeração de sua canção no campo abaixo!'
+               or ultima_msg_texto like 'Oi, %! Manda o número da música que você quer cantar 🎤'
+             then v_ola_novo
+             else ultima_msg_texto
+           end
+     where perfil_id = p_perfil
+       and (nome <> v_nome
+            or (ultima_msg_texto <> v_ola_novo
+                and (ultima_msg_texto like '%, envie a numeração de sua canção no campo abaixo!'
+                     or ultima_msg_texto like 'Oi, %! Manda o número da música que você quer cantar 🎤')));
   end if;
 end;
 $$;
