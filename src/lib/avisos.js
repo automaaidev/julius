@@ -4,7 +4,9 @@
 // à vontade, só mantenha os dois lados iguais se mudar.
 
 export const MSG = {
-  boasVindas: (nome) => `Oi, ${nome}! Manda o número da música que você quer cantar 🎤`,
+  boasVindas: (nome) => `${nome}, envie a numeração de sua canção no campo abaixo!`,
+  // saudação de antes de 2026-11-09: a conversa aberta ainda pode ter ela
+  boasVindasAntiga: (nome) => `Oi, ${nome}! Manda o número da música que você quer cantar 🎤`,
   entrouNaFila: (numero, posicao) => `Nº ${numero} na fila — posição ${posicao}`,
   casaFechada: 'A casa está fechada agora — tenta de novo no horário de funcionamento.',
   limiteMusicas: (limite) =>

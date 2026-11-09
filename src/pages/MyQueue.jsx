@@ -98,7 +98,7 @@ export default function MyQueue() {
   const motivoSemPedir = identificando
     ? 'Coloque seu nome no chat pra poder pedir música.'
     : fechadoConfirmado
-      ? 'A casa está fechada agora.'
+      ? 'Sistema encerrado para novos pedidos musicais.'
       : noLimite
         ? limite === 1
           ? 'Você já tem 1 música na fila.'
@@ -227,13 +227,13 @@ export default function MyQueue() {
         </div>
 
         <div className="q-head">
-          <h1>{nome ? `Oi, ${nome}!` : 'Minha fila'}</h1>
-          <p>Manda o número da música aqui no chat — sem senha, sem cadastro.</p>
+          <h1>{nome ? `Olá, ${nome}` : 'Minha fila'}</h1>
           {aberto !== undefined && (
             <p className="q-status">
               <span className={`q-status__pill ${aberto ? 'is-on' : 'is-off'}`}>
-                <span className="q-status__dot" /> {aberto ? 'Casa aberta' : 'Casa fechada'}
+                <span className="q-status__dot" /> {aberto ? 'Você está online' : 'Sistema encerrado'}
               </span>
+              {!aberto && <span className="q-status__hint">para novos pedidos musicais</span>}
               {!aberto && abreEm && <span className="q-status__hint">{abreEm.label}</span>}
               {aberto && settings?.encerramento_automatico === true && (
                 <span className="q-status__hint"><Moon size={12} /> A fila encerra à meia-noite</span>
@@ -277,7 +277,7 @@ export default function MyQueue() {
         </div>
 
         <div className="q-busca">
-          <BotaoCardapio onClick={() => setBuscando(true)}>Cardápio de músicas</BotaoCardapio>
+          <BotaoCardapio onClick={() => setBuscando(true)}>Lista musical</BotaoCardapio>
           <BotaoDuvidas onClick={() => setDuvidas(true)} />
         </div>
 
@@ -432,12 +432,12 @@ export default function MyQueue() {
               {naoExiste && (
                 <div className="q-warn" role="alert">
                   <span>
-                    Não achei a <b>Nº {naoExiste}</b> no cardápio. Confira se digitou certo — ou procure pelo nome da
-                    música.
+                    Não achei a <b>Nº {naoExiste}</b> na lista musical. Confira se digitou certo — ou procure pelo
+                    nome da música.
                   </span>
                   <div className="q-cancel__acts">
                     <button type="button" className="q-btn q-btn--primary q-btn--sm" onClick={() => setBuscando(true)}>
-                      Abrir o cardápio
+                      Abrir a lista musical
                     </button>
                     <button type="button" className="q-btn q-btn--ghost q-btn--sm" onClick={() => enviar(naoExiste)} disabled={enviando}>
                       Pedir mesmo assim
@@ -463,7 +463,7 @@ export default function MyQueue() {
                 </form>
               ) : fechadoConfirmado ? (
                 <p className="chat-lock">
-                  <Lock size={13} /> Casa fechada agora. Volte no horário de funcionamento pra pedir música.
+                  <Lock size={13} /> Sistema encerrado para novos pedidos musicais.
                 </p>
               ) : noLimite ? (
                 <p className="chat-lock">

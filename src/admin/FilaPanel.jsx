@@ -51,7 +51,7 @@ export default function FilaPanel({ entries, onAbrirChat, onChanged }) {
       if (novo === 'ajuda') {
         await mensagemDoOperador(
           e.perfil_id,
-          `❓ Sobre a Nº ${e.numero_musica}: a equipe precisa confirmar o número com você. Confere se está certo ou procura pelo nome no “Cardápio de músicas”.`
+          `❓ Sobre a Nº ${e.numero_musica}: a equipe precisa confirmar o número com você. Confere se está certo ou procura pelo nome no “Lista musical”.`
         )
       }
       onChanged?.()
@@ -255,8 +255,8 @@ function IncluirSemCelular({ onChanged }) {
           type="button"
           className="q-iconbtn q-iconbtn--lg"
           onClick={() => setBuscando(true)}
-          aria-label="Abrir o cardápio de músicas"
-          title="Cardápio de músicas"
+          aria-label="Abrir a lista musical"
+          title="Lista musical"
         >
           <Search size={17} />
         </button>

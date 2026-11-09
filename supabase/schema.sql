@@ -476,6 +476,9 @@ as $$
 declare
   v_nome text := btrim(coalesce(p_nome, ''));
   v_existing julius.conversas;
+  v_ola_antigo text;
+  v_ola_velho text;
+  v_ola_novo text;
 begin
   perform julius._limpar_conversas_antigas();
 
@@ -487,17 +490,32 @@ begin
   end if;
 
   select * into v_existing from julius.conversas where perfil_id = p_perfil;
+  v_ola_novo := v_nome || ', envie a numeração de sua canção no campo abaixo!';
 
   if v_existing.perfil_id is null then
     insert into julius.conversas (perfil_id, chave, nome)
     values (p_perfil, p_chave, v_nome);
 
     insert into julius.chat_mensagens (perfil_id, autor, texto)
-    values (p_perfil, 'sistema', 'Oi, ' || v_nome || '! Manda o número da música que você quer cantar 🎤');
+    values (p_perfil, 'sistema', v_ola_novo);
   elsif v_existing.chave <> p_chave then
     raise exception 'PERFIL_INVALIDO' using errcode = 'P0001';
   elsif v_existing.nome <> v_nome then
-    update julius.conversas set nome = v_nome where perfil_id = p_perfil;
+    -- "will, envie..." vira "Will Souza, envie...": a saudação acompanha o nome novo
+    -- (a de antes de 2026-11-09, "Oi, will! Manda...", também)
+    v_ola_antigo := v_existing.nome || ', envie a numeração de sua canção no campo abaixo!';
+    v_ola_velho := 'Oi, ' || v_existing.nome || '! Manda o número da música que você quer cantar 🎤';
+
+    update julius.chat_mensagens
+       set texto = v_ola_novo
+     where perfil_id = p_perfil
+       and autor = 'sistema'
+       and texto in (v_ola_antigo, v_ola_velho);
+
+    update julius.conversas
+       set nome = v_nome,
+           ultima_msg_texto = case when ultima_msg_texto in (v_ola_antigo, v_ola_velho) then v_ola_novo else ultima_msg_texto end
+     where perfil_id = p_perfil;
   end if;
 end;
 $$;
@@ -1085,7 +1103,7 @@ select v.tipo, v.titulo, v.texto, v.ordem
     ('faq', 'Como peço uma música?',
       'Digite seu nome e depois é só mandar o número da música aqui no chat. Quem manda primeiro entra primeiro na fila — não precisa esperar ninguém.', 1),
     ('faq', 'Não sei o número da música',
-      'Toque em “Cardápio de músicas”, procure pelo nome da música ou do cantor e toque nela. O número aparece ao lado do nome.', 2),
+      'Toque em “Lista musical”, procure pelo nome da música ou do cantor e toque nela. O número aparece ao lado do nome.', 2),
     ('faq', 'Mandei o número errado',
       'Toque em “Errou o número? Cancelar e mandar outro” no seu pedido e mande o número certo. Você entra de novo no fim da fila.', 3),
     ('faq', 'Em que posição estou? Quanto falta?',
@@ -1099,7 +1117,7 @@ select v.tipo, v.titulo, v.texto, v.ordem
     ('faq', 'A que horas a fila encerra?',
       'A fila encerra automaticamente à meia-noite. Quem ainda estava esperando recebe uma mensagem de agradecimento.', 8),
     ('resposta', 'Conferir número',
-      'Não achei esse número no aparelho. Confere se digitou certo ou procura pelo nome no “Cardápio de músicas”. 😉', 1),
+      'Não achei esse número no aparelho. Confere se digitou certo ou procura pelo nome no “Lista musical”. 😉', 1),
     ('resposta', 'Fila cheia',
       'A fila está cheia hoje, mas a sua música está garantida! O sistema avisa quando for a sua vez. 🎶', 2),
     ('resposta', 'Tá chegando',

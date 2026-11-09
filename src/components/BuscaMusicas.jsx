@@ -17,7 +17,7 @@ export function BotaoCardapio({ onClick, compacto = false, children }) {
   return (
     <button type="button" className={`busca-btn ${compacto ? 'busca-btn--compacto' : ''}`} onClick={onClick}>
       <BookOpen size={compacto ? 14 : 16} aria-hidden="true" />
-      <span>{children ?? 'Cardápio de músicas'}</span>
+      <span>{children ?? 'Lista musical'}</span>
     </button>
   )
 }
@@ -144,8 +144,8 @@ export default function BuscaMusicas({ onFechar, principal, secundaria, aviso, a
     >
       <div className="busca__painel" role="dialog" aria-modal="true" aria-labelledby="busca-titulo" ref={painelRef}>
         <header className="busca__topo">
-          <h2 id="busca-titulo">Cardápio de músicas</h2>
-          <button type="button" className="busca__fechar" onClick={onFechar} aria-label="Fechar cardápio">
+          <h2 id="busca-titulo">Lista musical</h2>
+          <button type="button" className="busca__fechar" onClick={onFechar} aria-label="Fechar lista musical">
             <X size={18} />
           </button>
         </header>
@@ -157,7 +157,7 @@ export default function BuscaMusicas({ onFechar, principal, secundaria, aviso, a
             value={q}
             onChange={(e) => setQ(e.target.value.slice(0, 60))}
             placeholder="Filtrar por música ou cantor"
-            aria-label="Filtrar o cardápio pelo nome da música, do cantor ou pelo número"
+            aria-label="Filtrar a lista pelo nome da música, do cantor ou pelo número"
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
@@ -215,7 +215,7 @@ export default function BuscaMusicas({ onFechar, principal, secundaria, aviso, a
               <AlertCircle size={16} />
               {admin && MIGRATION_PENDENTE.test(erro)
                 ? 'Falta rodar a migration 20261004_catalogo_musicas.sql no SQL Editor do Supabase.'
-                : 'Não deu pra carregar o cardápio agora. Tenta de novo em instantes.'}
+                : 'Não deu pra carregar a lista agora. Tenta de novo em instantes.'}
             </p>
           )}
 
@@ -231,7 +231,7 @@ export default function BuscaMusicas({ onFechar, principal, secundaria, aviso, a
               ) : (
                 <>
                   <BookOpen size={26} aria-hidden="true" />
-                  <p>O cardápio ainda está vazio.</p>
+                  <p>A lista ainda está vazia.</p>
                   <small>{admin ? 'Importe o catálogo na aba Músicas.' : 'Fale com a equipe da casa.'}</small>
                 </>
               )}
@@ -290,7 +290,7 @@ export default function BuscaMusicas({ onFechar, principal, secundaria, aviso, a
                   </button>
                 </div>
               )}
-              {!temMais && itens.length > LISTA_LONGA && <p className="busca__fim">Fim do cardápio · {fmt(total)} músicas</p>}
+              {!temMais && itens.length > LISTA_LONGA && <p className="busca__fim">Fim da lista · {fmt(total)} músicas</p>}
             </>
           )}
         </div>

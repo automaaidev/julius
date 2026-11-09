@@ -270,7 +270,7 @@ function seedChat() {
 
     stmtConv.run([perfil, chave, nome, iso(minAtras), ultimaTexto, naoLidas, criadoEm])
 
-    stmtMsg.run([uuid(), perfil, 'sistema', `Oi, ${nome}! Manda o número da música que você quer cantar 🎤`, iso(minAtras + 4)])
+    stmtMsg.run([uuid(), perfil, 'sistema', `${nome}, envie a numeração de sua canção no campo abaixo!`, iso(minAtras + 4)])
     if (entrada) {
       stmtMsg.run([uuid(), perfil, 'cliente', entrada[2], iso(minAtras + 2)])
       stmtMsg.run([uuid(), perfil, 'sistema', ultimaTexto, iso(minAtras)])

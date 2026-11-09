@@ -8,6 +8,8 @@ React (Vite) + Supabase. Fila e chat em tempo real via Supabase Realtime.
 2. No SQL Editor do projeto, rode `supabase/schema.sql` inteiro (instalação do zero).
    - Se o banco já existe numa versão anterior, rode as migrations que faltam
      em `supabase/migrations/`, em ordem (a mais nova é
+     `20261109_textos_da_casa.sql` — saudação "Fulano, envie a numeração..." e
+     "Lista musical" nas dúvidas —; antes dela
      `20261103_liberar_musica_repetida.sql`; antes dela
      `20261005_avisos_e_sinais.sql`, `20261004_catalogo_musicas.sql`
      — catálogo e cardápio — e `20261003_intervalo_repetir_musica.sql`, depois da

@@ -121,7 +121,7 @@ export default function Dashboard() {
             Painel
           </span>
           <div className="adm-actions">
-            <BotaoCardapio compacto onClick={() => setBuscando(true)}>Cardápio</BotaoCardapio>
+            <BotaoCardapio compacto onClick={() => setBuscando(true)}>Lista musical</BotaoCardapio>
             <Link to="/" className="q-back"><ExternalLink size={14} /> Ver fila</Link>
             {LOCAL && (
               <button type="button" className="q-back" onClick={() => localDb.reset()}>Resetar dados</button>

@@ -234,7 +234,22 @@ export const localDb = {
     } else if (existente.chave !== k) {
       throw new Error('PERFIL_INVALIDO')
     } else if (existente.nome !== n) {
-      run('UPDATE conversas SET nome = ? WHERE perfil_id = ?', [n, p])
+      // "will, envie..." vira "Will Souza, envie...": a saudação acompanha o nome novo
+      // (a de antes de 2026-11-09, "Oi, will! Manda...", também)
+      const olaAntigo = MSG.boasVindas(existente.nome)
+      const olaVelho = MSG.boasVindasAntiga(existente.nome)
+      run(`UPDATE chat_mensagens SET texto = ? WHERE perfil_id = ? AND autor = 'sistema' AND texto IN (?, ?)`, [
+        MSG.boasVindas(n),
+        p,
+        olaAntigo,
+        olaVelho,
+      ])
+      run(
+        `UPDATE conversas SET nome = ?,
+           ultima_msg_texto = CASE WHEN ultima_msg_texto IN (?, ?) THEN ? ELSE ultima_msg_texto END
+         WHERE perfil_id = ?`,
+        [n, olaAntigo, olaVelho, MSG.boasVindas(n), p]
+      )
     }
   },
 
