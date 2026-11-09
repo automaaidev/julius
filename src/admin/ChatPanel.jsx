@@ -125,8 +125,8 @@ function Thread({ perfilId, nome, onVoltar }) {
 
       <form className="chat-composer" onSubmit={onSubmit}>
         <input value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Escreva uma mensagem…" maxLength={500} />
-        <button type="submit" className="q-iconbtn" aria-label="Enviar">
-          <Send size={16} />
+        <button type="submit" className="chat-enviar" aria-label="Enviar">
+          <Send size={20} />
         </button>
       </form>
     </>

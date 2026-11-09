@@ -227,7 +227,6 @@ export default function MyQueue() {
         </div>
 
         <div className="q-head">
-          <h1>{nome ? `Olá, ${nome}` : 'Minha fila'}</h1>
           {aberto !== undefined && (
             <p className="q-status">
               <span className={`q-status__pill ${aberto ? 'is-on' : 'is-off'}`}>
@@ -457,8 +456,8 @@ export default function MyQueue() {
                     autoFocus
                     required
                   />
-                  <button className="q-iconbtn" type="submit" disabled={enviando} aria-label="Enviar">
-                    <Send size={16} />
+                  <button className="chat-enviar" type="submit" disabled={enviando} aria-label="Enviar">
+                    <Send size={20} />
                   </button>
                 </form>
               ) : fechadoConfirmado ? (
@@ -495,8 +494,8 @@ export default function MyQueue() {
                     maxLength={5}
                     required
                   />
-                  <button className="q-iconbtn" type="submit" disabled={enviando} aria-label="Enviar">
-                    <Send size={16} />
+                  <button className="chat-enviar" type="submit" disabled={enviando} aria-label="Enviar">
+                    <Send size={20} />
                   </button>
                 </form>
                 </>

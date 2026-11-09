@@ -67,13 +67,36 @@ a.chat-bubble { text-decoration: none; }
 
 .chat-composer {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   padding-top: 0.6rem;
   margin-top: 0.4rem;
   border-top: 1px solid var(--linha);
 }
 
-.chat-composer input { flex: 1; }
+.chat-composer input { flex: 1; min-width: 0; height: 48px; }
+
+/* enviar: círculo dourado da altura do campo (alvo de toque de 48px) */
+.chat-enviar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--luz);
+  color: var(--palco);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(231, 178, 76, 0.25);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.chat-enviar:hover { filter: brightness(1.08); }
+.chat-enviar:active { transform: scale(0.94); }
+.chat-enviar:focus-visible { outline: 2px solid var(--luz-suave); outline-offset: 2px; }
+.chat-enviar:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
 
 .chat-lock {
   display: flex;
