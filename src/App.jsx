@@ -3,6 +3,7 @@ import { Analytics } from '@vercel/analytics/react'
 import { SpeedInsights } from '@vercel/speed-insights/react'
 import QueueStatus from './pages/QueueStatus'
 import MyQueue from './pages/MyQueue'
+import Entrar from './pages/Entrar'
 import Login from './admin/Login'
 import Dashboard from './admin/Dashboard'
 import ProtectedRoute from './admin/ProtectedRoute'
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/minha-fila" replace />} />
         <Route path="/fila/:id" element={<QueueStatus />} />
         <Route path="/minha-fila" element={<MyQueue />} />
+        <Route path="/entrar" element={<Entrar />} />
         <Route path="/app/admin/login" element={<Login />} />
         <Route
           path="/app/admin"

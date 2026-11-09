@@ -1,0 +1,99 @@
+/* =========================================================
+   /entrar: logo do Juliu's em cima de um formulário curto de
+   nome e sobrenome. A abertura (Abertura.jsx) pousa a logo
+   animada exatamente em cima de .entrar__logo.
+   ========================================================= */
+
+.entrar {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(1.5rem, env(safe-area-inset-top)) 1rem max(1.5rem, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(60% 45% at 50% 30%, rgba(110, 42, 43, 0.55), transparent 72%),
+    var(--palco);
+}
+
+.entrar__teste { position: fixed; top: 0; left: 0; right: 0; margin: 0; border-radius: 0; z-index: 1; }
+
+.entrar__caixa {
+  width: 100%;
+  max-width: 360px;
+  display: grid;
+  justify-items: center;
+  gap: 1.6rem;
+}
+
+.entrar__logo {
+  display: block;
+  width: min(260px, 70vw);
+  height: auto;
+}
+
+/* até a abertura pousar, a logo de verdade fica guardando o lugar */
+.entrar__logo.is-oculta { visibility: hidden; }
+
+.entrar__form {
+  width: 100%;
+  display: grid;
+  gap: 0.55rem;
+  transition: opacity 0.45s ease-out, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* durante a fiação o formulário espera escondido (mas no lugar, pra logo saber onde pousar) */
+.entrar__caixa.is-esperando .entrar__form {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.entrar__titulo {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1.6rem;
+  color: var(--pessego);
+}
+
+.entrar__texto {
+  margin: 0 0 0.6rem;
+  text-align: center;
+  color: var(--texto-claro);
+  opacity: 0.85;
+  font-size: 0.95rem;
+}
+
+.entrar__rotulo {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--luz-suave);
+}
+
+.entrar input {
+  width: 100%;
+  height: 52px;
+  padding: 0 1.1rem;
+  border-radius: 14px;
+  border: 1px solid var(--linha);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--texto-claro);
+  font-size: 1.05rem;
+}
+
+.entrar input:focus { outline: 2px solid var(--luz); outline-offset: 1px; }
+.entrar input[aria-invalid='true'] { border-color: #c85050; }
+
+.entrar__dica { margin: 0; font-size: 0.8rem; color: var(--pessego-escuro); }
+.entrar__erro { margin: 0; }
+
+.entrar__botao { margin-top: 0.6rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .entrar__form { transition: none; }
+}

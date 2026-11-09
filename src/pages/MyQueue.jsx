@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  ArrowLeft,
+  LogOut,
   Send,
   Radio,
   Lock,
@@ -24,7 +24,7 @@ import { useChatCliente } from '../hooks/useChat'
 import { useSugestoes } from '../hooks/useSugestoes'
 import { useAgora } from '../hooks/useAgora'
 import { useEncerramento } from '../hooks/useEncerramento'
-import { getPerfilId, getPerfilChave, getPerfilNome, setPerfilNome } from '../lib/perfil'
+import { getPerfilId, getPerfilChave, getPerfilNome, esquecerPerfilNome, nomeCompleto } from '../lib/perfil'
 import { useTitulos } from '../hooks/useTitulos'
 import { useConferirNumero } from '../hooks/useConferirNumero'
 import { conferirNumero, rotuloMusica } from '../lib/catalogo'
@@ -48,9 +48,9 @@ export default function MyQueue() {
 
   const [perfilId] = useState(getPerfilId)
   const [chave] = useState(getPerfilChave)
-  const [nome, setNome] = useState(getPerfilNome())
-  const [identificando, setIdentificando] = useState(!getPerfilNome())
-  const [campoNome, setCampoNome] = useState('')
+  const navigate = useNavigate()
+  const [nome] = useState(getPerfilNome)
+  const identificado = nomeCompleto(nome) // sem nome e sobrenome, vai pra /entrar
   const [campoNumero, setCampoNumero] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
@@ -62,7 +62,7 @@ export default function MyQueue() {
   const [duvidas, setDuvidas] = useState(false) // folha de dúvidas frequentes aberta
   const { itens: avisosDaCasa } = useAvisos('aviso')
 
-  const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave, { ativo: !identificando })
+  const { mensagens, loading: chatLoading, iniciar, enviarNumero, cancelarMusica } = useChatCliente(perfilId, chave, { ativo: identificado })
 
   const scrollRef = useRef(null)
   const numeroRef = useRef(null)
@@ -73,7 +73,7 @@ export default function MyQueue() {
   // já se identificou antes nesse navegador -> resincroniza com o servidor
   // (idempotente) sem precisar passar pela tela de nome de novo.
   useEffect(() => {
-    if (getPerfilNome()) iniciar(getPerfilNome())
+    if (identificado) iniciar(nome)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -94,16 +94,14 @@ export default function MyQueue() {
   const aberto = settings ? abertoAgora(settings, agora) : undefined
   const fechadoConfirmado = !settingsLoading && settings != null && !aberto
   const abreEm = fechadoConfirmado ? proximaAbertura(settings.horario_funcionamento, agora) : null
-  const podePedir = !identificando && !fechadoConfirmado && !noLimite
-  const motivoSemPedir = identificando
-    ? 'Coloque seu nome no chat pra poder pedir música.'
-    : fechadoConfirmado
-      ? 'Sistema encerrado para novos pedidos musicais.'
-      : noLimite
-        ? limite === 1
-          ? 'Você já tem 1 música na fila.'
-          : `Você já tem ${limite} músicas na fila.`
-        : null
+  const podePedir = !fechadoConfirmado && !noLimite
+  const motivoSemPedir = fechadoConfirmado
+    ? 'Sistema encerrado para novos pedidos musicais.'
+    : noLimite
+      ? limite === 1
+        ? 'Você já tem 1 música na fila.'
+        : `Você já tem ${limite} músicas na fila.`
+      : null
 
   // sugestões: tira o que a pessoa já tem na fila, o que já cantou e — com a
   // regra de música repetida ligada — o que qualquer um já tem na fila (o
@@ -129,25 +127,9 @@ export default function MyQueue() {
     setTimeout(() => numeroRef.current?.focus(), 60)
   }
 
-  async function confirmarNome(e) {
-    e.preventDefault()
-    const n = campoNome.trim()
-    if (!n) return
-    setEnviando(true)
-    setErro('')
-    try {
-      const r = await iniciar(n)
-      if (!r.ok) {
-        setErro(r.erro)
-        return
-      }
-      setPerfilNome(n)
-      setNome(n)
-      setIdentificando(false)
-      setCampoNome('')
-    } finally {
-      setEnviando(false)
-    }
+  function sair() {
+    esquecerPerfilNome()
+    navigate('/entrar', { replace: true })
   }
 
   async function enviar(n) {
@@ -200,6 +182,8 @@ export default function MyQueue() {
     }
   }
 
+  if (!identificado) return <Navigate to="/entrar" replace />
+
   return (
     <div className="q-page">
       <div className="q-shell q-shell--top">
@@ -212,18 +196,9 @@ export default function MyQueue() {
           <Link to="/minha-fila" className="q-brand">
             <img className="q-brand__logo" src="/logo-wordmark.png" alt="Juliu's" width="1048" height="272" />
           </Link>
-          {!identificando && (
-            <button
-              type="button"
-              className="q-back"
-              onClick={() => {
-                setIdentificando(true)
-                setErro('')
-              }}
-            >
-              <ArrowLeft size={15} /> Trocar nome
-            </button>
-          )}
+          <button type="button" className="q-back" onClick={sair} aria-label={`Sair (${nome})`}>
+            <LogOut size={15} /> Sair
+          </button>
         </div>
 
         <div className="q-head">
@@ -445,22 +420,7 @@ export default function MyQueue() {
                 </div>
               )}
 
-              {identificando ? (
-                <form className="chat-composer" onSubmit={confirmarNome}>
-                  <input
-                    value={campoNome}
-                    onChange={(e) => setCampoNome(e.target.value.slice(0, 24))}
-                    placeholder="Qual seu nome (ou da dupla)?"
-                    minLength={1}
-                    maxLength={24}
-                    autoFocus
-                    required
-                  />
-                  <button className="chat-enviar" type="submit" disabled={enviando} aria-label="Enviar">
-                    <Send size={20} />
-                  </button>
-                </form>
-              ) : fechadoConfirmado ? (
+              {fechadoConfirmado ? (
                 <p className="chat-lock">
                   <Lock size={13} /> Sistema encerrado para novos pedidos musicais.
                 </p>

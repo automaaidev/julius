@@ -24,9 +24,16 @@ React (Vite) + Supabase. Fila e chat em tempo real via Supabase Realtime.
 
 - `/` — redireciona pra `/minha-fila` (a casa só usa o sistema de fila, sem
   site de apresentação)
-- `/minha-fila` — chat do cliente: diz o nome, depois só manda o número da
-  música. Mostra se a casa está aberta, as músicas mais pedidas (sugestões) e
-  o **caderninho** (aba "Meu caderninho")
+- `/entrar` — entrada de quem não tem nome (1ª visita ou depois de "Sair") ou
+  tem só o primeiro nome salvo: abertura com a logo (fiação de luz desenha,
+  acende e pousa no formulário) e um formulário de nome e sobrenome (o primeiro
+  nome já vem no campo). Com nome e sobrenome, vai pra `/minha-fila`; a
+  saudação do chat passa a usar o nome novo
+- `/minha-fila` — chat do cliente: só manda o número da música. Sem nome e
+  sobrenome, redireciona pra `/entrar`. Mostra se a casa está aberta, as
+  músicas mais pedidas (sugestões) e o **caderninho** (aba "Meu caderninho").
+  "Sair" esquece só o nome (o perfil, a conversa e as músicas na fila
+  continuam nesse celular) e volta pra `/entrar`
 - `/fila/:id` — acompanhar uma música específica em tempo real
 - `/app/admin/login` — login do admin
 - `/app/admin` — painel: palco (1 música por vez), barra "montar no aparelho"

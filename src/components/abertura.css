@@ -1,0 +1,146 @@
+/* =========================================================
+   Abertura da tela de entrada (Abertura.jsx): fiação de luz
+   desenha a logo, ela acende e voa até o formulário.
+   --p (0 a 1) = progresso do desenho, vem do JS a cada quadro.
+   ========================================================= */
+
+.abertura {
+  --p: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.abertura__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.abertura__fundo {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(60% 45% at 50% 45%, rgba(110, 42, 43, 0.75), transparent 72%),
+    var(--palco);
+}
+
+/* clarão da hora que acende: um halo dourado atrás do nome, só opacidade */
+.abertura__clarao {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(40% 30% at 50% 47%, rgba(231, 178, 76, 0.32), transparent 70%);
+}
+
+.abertura__logo {
+  grid-area: 1 / 1;
+  position: relative;
+  width: min(340px, 80vw);
+  height: auto;
+  overflow: visible;
+  transform-origin: 0 0;
+}
+
+.abertura__palco {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* fiação: cada traço desenha dentro da sua faixa [--s, --e] do progresso */
+.abertura__traco {
+  fill: none;
+  stroke: var(--luz);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* "1 2": o padrão nunca recomeça um traço no fim da linha (a ponta redonda faria um ponto) */
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: calc(1 - clamp(0, (var(--p) - var(--s)) / (var(--e) - var(--s)), 1));
+  opacity: clamp(0, (var(--p) - var(--s)) * 400, 1);
+  filter: drop-shadow(0 0 6px rgba(231, 178, 76, 0.7));
+}
+
+/* lâmpadas nas pontas: acendem quando o progresso passa de --at (a caneta chegou nelas) */
+.abertura__halo,
+.abertura__lampada {
+  --k: clamp(0, (var(--p) - var(--at, 1)) * 14, 1);
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: var(--k);
+  transform: scale(calc(0.4 + 0.6 * var(--k)));
+}
+
+.abertura__halo { fill: var(--luz); fill-opacity: 0.18; }
+
+.abertura__lampada {
+  fill: var(--luz-suave);
+  stroke: var(--palco);
+  stroke-width: 3;
+}
+
+/* letras: a máscara (traços .abertura__cresce) esconde até eles engrossarem */
+.abertura__cresce {
+  fill: none;
+  stroke: #fff; /* na máscara, branco = aparece */
+  stroke-width: 0;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.abertura__inteiro,
+.abertura__letra { opacity: 0; }
+
+/* energia: anel (espessura constante na tela) e faíscas, todos nascem invisíveis */
+.abertura__anel {
+  fill: none;
+  stroke: var(--luz);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.abertura__faisca {
+  fill: var(--luz);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.abertura__faisca--pessego { fill: var(--pessego); }
+
+.abertura__pular {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  left: 50%;
+  translate: -50% 0;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.78rem;
+  color: rgba(252, 202, 175, 0.6);
+  background: transparent;
+  border: 1px solid var(--linha);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.abertura__pular:hover,
+.abertura__pular:focus-visible { color: var(--luz); border-color: var(--luz); }
+
+/* movimento reduzido: logo parada, sem fiação */
+@media (prefers-reduced-motion: reduce) {
+  .abertura__fiacao,
+  .abertura__nascendo { display: none; }
+  .abertura__inteiro,
+  .abertura__letra { opacity: 1; }
+}

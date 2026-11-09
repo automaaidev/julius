@@ -45,9 +45,30 @@ export function getPerfilNome() {
   }
 }
 
+// Nome e sobrenome: pelo menos duas palavras com 2+ letras ("Ana Souza", dupla "Ana e Bia";
+// "Ana" e "Ana S." não passam). Só a tela confere: o servidor aceita qualquer nome, então
+// o painel e quem já tinha nome salvo seguem como estão.
+export function nomeCompleto(nome) {
+  const palavras = nome
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p.replace(/[^\p{L}]/gu, '').length >= 2)
+  return palavras.length >= 2
+}
+
 export function setPerfilNome(nome) {
   try {
     localStorage.setItem(NOME_KEY, nome)
+  } catch {
+    /* ignore */
+  }
+}
+
+// "Sair": some só o nome. O perfil (id + chave) fica, então quem entrar de novo nesse
+// celular continua com a mesma conversa, as mesmas músicas na fila e o mesmo limite.
+export function esquecerPerfilNome() {
+  try {
+    localStorage.removeItem(NOME_KEY)
   } catch {
     /* ignore */
   }
